@@ -1,6 +1,6 @@
-# CLAUDE.md
+# AGENTS.md - Development Guidelines for web3signer-go
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides guidance for AI agents working on the web3signer-go project.
 
 ## 角色定义
 
@@ -164,116 +164,216 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 这里描述 AI 可以使用的各类工具。例如：
 - `get_code_context_exa` - 搜索并获取编程任务的相关上下文。Exa-code 拥有高质量和最新的库、SDK、API 上下文。当我的查询包含 exa-code 或任何与代码相关的内容时,必须使用此工具
 
+## Project Overview
 
-## 仓库指南
+**web3signer-go** is a Go implementation of web3signer with MPC-KMS (Multi-Party Computation - Key Management Service) signing support. It provides an HTTP JSON-RPC interface that signs transactions using MPC-KMS and forwards other JSON-RPC methods to downstream services.
 
-This is **web3signer-go**, a Go implementation inspired by [Consensys/web3signer](https://github.com/Consensys/web3signer) with a specific focus on **MPC-KMS (Multi-Party Computation - Key Management Service) signing**. The project is in its **initialization phase** with no source code implemented yet.
+## Build Commands
 
-### Current State
-
-- **Repository**: Newly initialized with only basic files
-- **Language**: Go
-- **License**: GNU General Public License v3.0 (GPLv3)
-- **Remote**: `git@github.com:mowind/web3signer-go.git`
-
-### Project Structure
-
-The repository currently contains:
-- `README.md` - Project documentation with intended usage
-- `.gitignore` - Go-specific ignore patterns
-- `LICENSE` - GPLv3 license
-- No source code directories yet
-
-### Intended Architecture (from README)
-
-Based on the README usage example, the application will:
-1. Run an HTTP server with configurable host/port (`--http-host`, `--http-port`)
-2. Integrate with MPC-KMS service for cryptographic operations (`--kms-endpoint`, `--kms-access-key-id`, `--kms-secret-key`)
-3. Forward requests to a downstream HTTP service (`--downstream-http-host`, `--downstream-http-port`, `--downstream-http-path`)
-
-### Development Setup
-
-#### Initialization Steps Needed
-
-Since this is a new Go project, the following setup is required:
-
-1. **Initialize Go module**:
-   ```bash
-   go mod init github.com/mowind/web3signer-go
-   ```
-
-2. **Create standard Go project structure**:
-   ```
-   cmd/           # Main application entry points
-   pkg/           # Library code that can be used by external applications
-   internal/      # Private application and library code
-   api/           # API definitions (OpenAPI/Swagger, gRPC protobufs)
-   configs/       # Configuration file templates or default configs
-   scripts/       # Scripts to perform various build, install, analysis, etc.
-   test/          # Additional external test apps and test data
-   ```
-
-3. **Add dependencies** (likely needed):
-   - gin
-   - viper
-   - cobra
-   - logrus
-
-### Build and Development Commands
-
-Once the project is initialized, typical Go commands will apply:
-
-#### Building
+### Basic Build
 ```bash
-go build ./...           # Build all packages
-go build -o web3signer ./cmd/web3signer  # Build specific binary
+make build          # Build binary to build/web3signer
+make clean          # Clean build artifacts
 ```
 
-#### Testing
+### Go Commands
 ```bash
-go test ./...            # Run all tests
-go test -v ./...         # Run tests with verbose output
-go test -race ./...      # Run tests with race detector
+go build ./...                           # Build all packages
+go build -o web3signer ./cmd/web3signer/ # Build specific binary
+go run ./cmd/web3signer/ --help          # Run with help
 ```
 
-#### Dependency Management
+### Testing
 ```bash
-go mod tidy              # Add missing and remove unused modules
-go mod download          # Download modules to local cache
-go list -m all           # List all dependencies
+go test ./...                    # Run all tests
+go test -v ./...                 # Verbose test output
+go test -race ./...              # Run with race detector
+go test ./internal/kms/...       # Run tests for specific package
+go test -run TestClient_Sign     # Run single test by name
+go test -v -run "Test.*Sign.*"   # Run tests matching pattern
 ```
 
-#### Code Quality
+### Code Quality
 ```bash
-go fmt ./...             # Format all Go files
-go vet ./...             # Run go vet on all packages
-golangci-lint run        # Run comprehensive linter (if installed)
+go fmt ./...                     # Format all Go files
+go vet ./...                     # Run go vet
+go mod tidy                      # Clean up dependencies
 ```
 
-### Git Workflow
+## Code Style Guidelines
 
-- **Branch**: `main` is the primary branch
-- **Remote**: Configured to `origin` (GitHub)
-- **Ignore patterns**: Standard Go patterns in `.gitignore`
+### Imports Organization
+Imports should be grouped with blank lines:
+1. Standard library imports
+2. Third-party imports
+3. Local imports (github.com/mowind/web3signer-go/...)
 
-### Important Notes for Future Development
+Example:
+```go
+import (
+    "context"
+    "fmt"
+    "net/http"
+    
+    "github.com/gin-gonic/gin"
+    "github.com/sirupsen/logrus"
+    
+    "github.com/mowind/web3signer-go/internal/config"
+)
+```
 
-1. **MPC-KMS Focus**: This implementation specifically targets MPC-KMS signing, unlike the original web3signer which supports multiple signing mechanisms.
+### Naming Conventions
+- **Packages**: Lowercase, single word (e.g., `kms`, `config`, `server`)
+- **Interfaces**: End with `er` or `Interface` (e.g., `Signer`, `ClientInterface`)
+- **Methods**: MixedCase, verbs for actions (e.g., `Validate()`, `Start()`, `SignRequest()`)
+- **Variables**: camelCase, descriptive names
+- **Constants**: UPPER_SNAKE_CASE
+- **Test files**: `*_test.go`, test functions start with `Test`
 
-2. **Configuration**: The application will be configured via command-line flags as shown in the README.
+### Error Handling
+- Always check errors immediately
+- Use `fmt.Errorf` with `%w` for wrapping errors
+- Return concrete error types from internal packages
+- Use structured error types in `internal/errors/`
 
-3. **Downstream Integration**: The architecture includes forwarding capabilities to downstream HTTP services.
+Example:
+```go
+func (c *Client) Sign(ctx context.Context, keyID string, message []byte) ([]byte, error) {
+    if keyID == "" {
+        return nil, fmt.Errorf("keyID cannot be empty")
+    }
+    
+    signature, err := c.doSign(ctx, keyID, message)
+    if err != nil {
+        return nil, fmt.Errorf("sign failed: %w", err)
+    }
+    
+    return signature, nil
+}
+```
 
-4. **Early Stage**: This is essentially a project skeleton - all implementation work remains to be done.
+### Types and Structs
+- Use `mapstructure` tags for configuration structs
+- Add `Validate()` methods for configuration validation
+- Keep structs focused and minimal
 
-5. **License Compliance**: GPLv3 license requires derivative works to also be open source under GPLv3.
+Example:
+```go
+type KMSConfig struct {
+    Endpoint    string `mapstructure:"endpoint"`
+    AccessKeyID string `mapstructure:"access-key-id"`
+    SecretKey   string `mapstructure:"secret-key"`
+    KeyID       string `mapstructure:"key-id"`
+}
 
-### Recommended Next Steps
+func (c *KMSConfig) Validate() error {
+    if c.Endpoint == "" {
+        return fmt.Errorf("endpoint is required")
+    }
+    // ... more validation
+}
+```
 
-1. Initialize Go module and create directory structure
-2. Implement basic HTTP server with flag parsing
-3. Add MPC-KMS client integration
-4. Implement signing logic
-5. Add downstream forwarding capability
-6. Write comprehensive tests
-7. Set up CI/CD pipeline
+### Testing Patterns
+- Use table-driven tests with `t.Run()` for subtests
+- Mock external dependencies
+- Test both success and error cases
+- Use `testify/assert` if available (check go.mod)
+
+Example test structure:
+```go
+func TestCalculateContentSHA256(t *testing.T) {
+    tests := []struct {
+        name     string
+        input    []byte
+        expected string
+    }{
+        {
+            name:     "empty input",
+            input:    []byte(""),
+            expected: "47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU=",
+        },
+        // ... more test cases
+    }
+
+    for _, tt := range tests {
+        t.Run(tt.name, func(t *testing.T) {
+            result := calculateContentSHA256(tt.input)
+            if result != tt.expected {
+                t.Errorf("calculateContentSHA256(%q) = %q, want %q", 
+                    tt.input, result, tt.expected)
+            }
+        })
+    }
+}
+```
+
+### Logging
+- Use `logrus` for structured logging
+- Log at appropriate levels: Debug, Info, Warn, Error
+- Include context in log messages
+
+### HTTP and JSON-RPC
+- Use `gin` for HTTP routing
+- JSON-RPC requests/responses follow `internal/jsonrpc/types.go`
+- Handle errors with appropriate HTTP/JSON-RPC error codes
+
+## Project Structure
+```
+cmd/                    # Application entry points
+├── web3signer/         # Main application
+└── test-kms/           # Test utilities
+
+internal/               # Private application code
+├── config/             # Configuration types and validation
+├── kms/                # MPC-KMS client implementation
+├── server/             # HTTP server
+├── router/             # JSON-RPC routing
+├── jsonrpc/            # JSON-RPC types and utilities
+├── downstream/         # Downstream service client
+└── errors/             # Error types and handling
+
+test/                   # Integration tests and mocks
+api/                    # API definitions
+configs/                # Configuration templates
+scripts/                # Build and deployment scripts
+```
+
+## Development Workflow
+
+1. **Before making changes**: Run `go test ./...` to ensure tests pass
+2. **Implement feature**: Follow existing patterns and conventions
+3. **Add tests**: Include unit tests for new functionality
+4. **Format code**: Run `go fmt ./...`
+5. **Check quality**: Run `go vet ./...`
+6. **Build**: Run `make build` to verify compilation
+7. **Test**: Run integration tests if applicable
+
+## Important Notes
+
+- **MPC-KMS Focus**: This implementation specifically targets MPC-KMS signing
+- **Configuration**: Uses Cobra/Viper for CLI flags and config files
+- **Error Handling**: Structured error system in `internal/errors/`
+- **Testing**: Comprehensive test coverage with mocks in `test/`
+- **Dependencies**: Check `go.mod` for available libraries before adding new ones
+
+## Common Tasks
+
+### Adding a New Configuration Option
+1. Add field to appropriate struct in `internal/config/`
+2. Add `mapstructure` tag
+3. Add validation in `Validate()` method
+4. Update CLI flags in `cmd/web3signer/flags.go`
+5. Add tests in corresponding `*_test.go` file
+
+### Creating a New Handler
+1. Define handler function signature
+2. Implement in appropriate package (`internal/router/` or `internal/server/`)
+3. Add route registration
+4. Write tests with proper mocks
+
+### Adding External Integration
+1. Create interface in appropriate package
+2. Implement concrete type
+3. Add configuration and validation
+4. Write comprehensive tests with mocks
