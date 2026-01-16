@@ -47,7 +47,7 @@ func (f *RouterFactory) CreateRouter(mpcSigner *signer.MPCKMSSigner, downstreamC
 
 	// 注册转发处理器（处理所有其他方法）
 	forwardHandler := NewForwardHandler(downstreamClient, f.logger)
-	router.Register(&MethodHandler{
+	router.SetDefaultHandler(&MethodHandler{
 		handler: forwardHandler,
 		method:  "forward_handler", // 这个会处理所有非签名方法
 	})

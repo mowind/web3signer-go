@@ -20,17 +20,28 @@ type Handler interface {
 
 // Router JSON-RPC 请求路由器
 type Router struct {
-	handlers map[string]Handler
-	mu       sync.RWMutex
-	logger   *logrus.Logger
+	handlers       map[string]Handler
+	defaultHandler Handler // 默认处理器，处理未注册的方法
+	mu             sync.RWMutex
+	logger         *logrus.Logger
 }
 
 // NewRouter 创建新的 JSON-RPC 路由器
 func NewRouter(logger *logrus.Logger) *Router {
 	return &Router{
-		handlers: make(map[string]Handler),
-		logger:   logger,
+		handlers:       make(map[string]Handler),
+		defaultHandler: nil,
+		logger:         logger,
 	}
+}
+
+// SetDefaultHandler 设置默认处理器
+func (r *Router) SetDefaultHandler(handler Handler) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	r.defaultHandler = handler
+	r.logger.Info("Default handler set")
 }
 
 // Register 注册处理器
@@ -77,8 +88,14 @@ func (r *Router) Route(ctx context.Context, request *jsonrpc.Request) *jsonrpc.R
 	// 查找处理器
 	handler, found := r.getHandler(request.Method)
 	if !found {
-		logger.WithField("method", request.Method).Warn("Method not found")
-		return jsonrpc.NewErrorResponse(request.ID, jsonrpc.MethodNotFoundError)
+		// 如果没有找到特定处理器，尝试使用默认处理器
+		if r.defaultHandler != nil {
+			logger.WithField("method", request.Method).Debug("Using default handler")
+			handler = r.defaultHandler
+		} else {
+			logger.WithField("method", request.Method).Warn("Method not found")
+			return jsonrpc.NewErrorResponse(request.ID, jsonrpc.MethodNotFoundError)
+		}
 	}
 
 	// 调用处理器
