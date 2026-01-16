@@ -39,10 +39,10 @@ func (c *HTTPConfig) Validate() error {
 
 // KMSConfig 定义 MPC-KMS 配置
 type KMSConfig struct {
-	Endpoint      string `mapstructure:"endpoint"`
-	AccessKeyID   string `mapstructure:"access-key-id"`
-	SecretKey     string `mapstructure:"secret-key"`
-	KeyID         string `mapstructure:"key-id"`
+	Endpoint    string `mapstructure:"endpoint"`
+	AccessKeyID string `mapstructure:"access-key-id"`
+	SecretKey   string `mapstructure:"secret-key"`
+	KeyID       string `mapstructure:"key-id"`
 }
 
 // Validate 验证 KMS 配置
@@ -64,9 +64,9 @@ func (c *KMSConfig) Validate() error {
 
 // DownstreamConfig 定义下游服务配置
 type DownstreamConfig struct {
-	HTTPHost string `mapstructure:"http-host"`  // 完整的host，如 http://127.0.0.1 或 https://api.example.com
-	HTTPPort int    `mapstructure:"http-port"`  // 端口，如果host中已包含端口或不需要端口，可以为0
-	HTTPPath string `mapstructure:"http-path"`  // 路径，如 /api/v1/jsonrpc
+	HTTPHost string `mapstructure:"http-host"` // 完整的host，如 http://127.0.0.1 或 https://api.example.com
+	HTTPPort int    `mapstructure:"http-port"` // 端口，如果host中已包含端口或不需要端口，可以为0
+	HTTPPath string `mapstructure:"http-path"` // 路径，如 /api/v1/jsonrpc
 }
 
 // Validate 验证下游服务配置

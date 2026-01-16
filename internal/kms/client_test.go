@@ -50,12 +50,12 @@ func TestCalculateContentSHA256(t *testing.T) {
 
 func TestBuildSigningString(t *testing.T) {
 	tests := []struct {
-		name           string
-		verb           string
-		contentSHA256  string
-		contentType    string
-		date           string
-		expected       string
+		name          string
+		verb          string
+		contentSHA256 string
+		contentType   string
+		date          string
+		expected      string
 	}{
 		{
 			name:          "POST request",
@@ -127,10 +127,10 @@ func TestCalculateHMACSHA256(t *testing.T) {
 
 func TestBuildAuthorizationHeader(t *testing.T) {
 	tests := []struct {
-		name       string
+		name        string
 		accessKeyID string
-		signature  string
-		expected   string
+		signature   string
+		expected    string
 	}{
 		{
 			name:        "valid credentials",
@@ -158,10 +158,10 @@ func TestBuildAuthorizationHeader(t *testing.T) {
 
 func TestClient_SignRequest(t *testing.T) {
 	cfg := &config.KMSConfig{
-		Endpoint:      "https://kms.example.com",
-		AccessKeyID:   "AK1234567890",
-		SecretKey:     "test-secret-key",
-		KeyID:         "test-key-id",
+		Endpoint:    "https://kms.example.com",
+		AccessKeyID: "AK1234567890",
+		SecretKey:   "test-secret-key",
+		KeyID:       "test-key-id",
 	}
 
 	client := NewClient(cfg)
@@ -262,10 +262,10 @@ func TestClient_SignRequest(t *testing.T) {
 
 func TestClient_Do(t *testing.T) {
 	cfg := &config.KMSConfig{
-		Endpoint:      "https://kms.example.com",
-		AccessKeyID:   "AK1234567890",
-		SecretKey:     "test-secret-key",
-		KeyID:         "test-key-id",
+		Endpoint:    "https://kms.example.com",
+		AccessKeyID: "AK1234567890",
+		SecretKey:   "test-secret-key",
+		KeyID:       "test-key-id",
 	}
 
 	client := NewClient(cfg)
@@ -314,4 +314,3 @@ func (r *errorReader) Read(p []byte) (n int, err error) {
 func (r *errorReader) Close() error {
 	return nil
 }
-

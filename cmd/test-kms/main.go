@@ -14,10 +14,10 @@ import (
 func main() {
 	// 使用提供的参数
 	kmsConfig := &config.KMSConfig{
-		Endpoint:      "http://10.2.8.108:8080",
-		AccessKeyID:   "c609f7de1e154999bd1018026a665149",
-		SecretKey:     "Z7CY32LuQW+ccdc+m01YY4b92neAi7bM5bQ0SWbXjp4=",
-		KeyID:         "38HGvLc8nJ6KwQqn2PzCvZg70yJ",
+		Endpoint:    "http://10.2.8.108:8080",
+		AccessKeyID: "c609f7de1e154999bd1018026a665149",
+		SecretKey:   "Z7CY32LuQW+ccdc+m01YY4b92neAi7bM5bQ0SWbXjp4=",
+		KeyID:       "38HGvLc8nJ6KwQqn2PzCvZg70yJ",
 	}
 
 	fmt.Println("=== MPC-KMS HTTP签名测试 ===")
@@ -222,7 +222,7 @@ func isAuthError(err error) bool {
 func contains(s, substr string) bool {
 	return len(s) >= len(substr) && (s == substr ||
 		(len(s) > len(substr) && (s[:len(substr)] == substr ||
-		contains(s[1:], substr))))
+			contains(s[1:], substr))))
 }
 
 // 辅助函数：手动构建请求测试签名

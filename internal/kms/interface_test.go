@@ -12,11 +12,11 @@ import (
 
 // mockClient 模拟 MPC-KMS 客户端
 type mockClient struct {
-	signFunc           func(ctx context.Context, keyID string, message []byte) ([]byte, error)
+	signFunc            func(ctx context.Context, keyID string, message []byte) ([]byte, error)
 	signWithOptionsFunc func(ctx context.Context, keyID string, message []byte, encoding DataEncoding, summary *SignSummary, callbackURL string) ([]byte, error)
-	getTaskResultFunc  func(ctx context.Context, taskID string) (*TaskResult, error)
-	waitForTaskFunc    func(ctx context.Context, taskID string, interval time.Duration) (*TaskResult, error)
-	doFunc             func(req *http.Request) (*http.Response, error)
+	getTaskResultFunc   func(ctx context.Context, taskID string) (*TaskResult, error)
+	waitForTaskFunc     func(ctx context.Context, taskID string, interval time.Duration) (*TaskResult, error)
+	doFunc              func(req *http.Request) (*http.Response, error)
 }
 
 func (m *mockClient) Sign(ctx context.Context, keyID string, message []byte) ([]byte, error) {
@@ -110,25 +110,25 @@ func TestMPCKMSSigner_SignMessage(t *testing.T) {
 
 func TestMPCKMSSigner_SignTransaction(t *testing.T) {
 	tests := []struct {
-		name           string
-		keyID          string
-		transaction    []byte
-		expectedSig    []byte
-		shouldError    bool
+		name        string
+		keyID       string
+		transaction []byte
+		expectedSig []byte
+		shouldError bool
 	}{
 		{
-			name:           "successful transaction signature",
-			keyID:          "test-key-id",
-			transaction:    []byte("0x1234567890abcdef"),
-			expectedSig:    []byte("0xabcdef1234567890"),
-			shouldError:    false,
+			name:        "successful transaction signature",
+			keyID:       "test-key-id",
+			transaction: []byte("0x1234567890abcdef"),
+			expectedSig: []byte("0xabcdef1234567890"),
+			shouldError: false,
 		},
 		{
-			name:           "hex encoded transaction",
-			keyID:          "test-key-id",
-			transaction:    []byte("deadbeef"),
-			expectedSig:    []byte("0xsignature"),
-			shouldError:    false,
+			name:        "hex encoded transaction",
+			keyID:       "test-key-id",
+			transaction: []byte("deadbeef"),
+			expectedSig: []byte("0xsignature"),
+			shouldError: false,
 		},
 	}
 
@@ -173,10 +173,10 @@ func TestMPCKMSSigner_SignTransaction(t *testing.T) {
 
 func TestNewMPCKMSSigner(t *testing.T) {
 	cfg := &config.KMSConfig{
-		Endpoint:      "https://kms.example.com",
-		AccessKeyID:   "AK1234567890",
-		SecretKey:     "test-secret-key",
-		KeyID:         "test-key-id",
+		Endpoint:    "https://kms.example.com",
+		AccessKeyID: "AK1234567890",
+		SecretKey:   "test-secret-key",
+		KeyID:       "test-key-id",
 	}
 
 	client := NewClient(cfg)
@@ -201,10 +201,10 @@ func TestInterfaceImplementation(t *testing.T) {
 	var _ Signer = (*MPCKMSSigner)(nil)
 
 	cfg := &config.KMSConfig{
-		Endpoint:      "https://kms.example.com",
-		AccessKeyID:   "AK1234567890",
-		SecretKey:     "test-secret-key",
-		KeyID:         "test-key-id",
+		Endpoint:    "https://kms.example.com",
+		AccessKeyID: "AK1234567890",
+		SecretKey:   "test-secret-key",
+		KeyID:       "test-key-id",
 	}
 
 	client := NewClient(cfg)

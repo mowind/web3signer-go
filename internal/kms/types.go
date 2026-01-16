@@ -6,10 +6,10 @@ import (
 
 // SignRequest 表示 MPC-KMS 签名请求
 type SignRequest struct {
-	Data         string          `json:"data"`
-	DataEncoding string          `json:"data_encoding,omitempty"`
-	Summary      *SignSummary    `json:"summary,omitempty"`
-	CallbackURL  string          `json:"callback_url,omitempty"`
+	Data         string       `json:"data"`
+	DataEncoding string       `json:"data_encoding,omitempty"`
+	Summary      *SignSummary `json:"summary,omitempty"`
+	CallbackURL  string       `json:"callback_url,omitempty"`
 }
 
 // SignSummary 表示签名数据摘要
