@@ -23,23 +23,26 @@
 # 构建项目
 make build
 
-# 运行测试
-make test
-
-# 格式化代码
-make fmt
-
-# 代码检查
-make vet
-
-# 跨平台编译
-make build-all
-
 # 清理构建文件
 make clean
 
 # 查看帮助
 make help
+```
+
+### 手动构建
+
+如果需要手动构建：
+
+```bash
+# 构建
+go build -o web3signer ./cmd/web3signer/
+
+# 运行
+./web3signer --help
+
+# 指定配置文件
+./web3signer --config /path/to/config.yaml
 ```
 
 ### 手动构建
@@ -82,12 +85,15 @@ make run
 # 完整配置示例
 ./web3signer \
   --http-host 0.0.0.0 \
-  --http-port 8545 \
+  --http-port 9000 \
   --kms-endpoint https://kms.example.com \
   --kms-access-key-id YOUR_ACCESS_KEY \
   --kms-secret-key YOUR_SECRET_KEY \
   --kms-key-id YOUR_KEY_ID \
-  --log-level debug
+  --downstream-http-host http://localhost \
+  --downstream-http-port 8545 \
+  --downstream-http-path / \
+  --log-level info
 ```
 
 ---
@@ -105,22 +111,25 @@ services:
     container_name: web3signer
     restart: unless-stopped
     ports:
-      - "8545:8545"
+      - "9000:9000"
     environment:
-      - HTTP_HOST=0.0.0.0
-      - HTTP_PORT=8545
-      - KMS_ENDPOINT=https://kms.example.com
-      - KMS_ACCESS_KEY_ID=YOUR_ACCESS_KEY
-      - KMS_SECRET_KEY=YOUR_SECRET_KEY
-      - KMS_KEY_ID=YOUR_KEY_ID
-      - LOG_LEVEL=info
+      - WEB3SIGNER_HTTP_HOST=0.0.0.0
+      - WEB3SIGNER_HTTP_PORT=9000
+      - WEB3SIGNER_KMS_ENDPOINT=https://kms.example.com
+      - WEB3SIGNER_KMS_ACCESS_KEY_ID=YOUR_ACCESS_KEY
+      - WEB3SIGNER_KMS_SECRET_KEY=YOUR_SECRET_KEY
+      - WEB3SIGNER_KMS_KEY_ID=YOUR_KEY_ID
+      - WEB3SIGNER_DOWNSTREAM_HTTP_HOST=http://localhost
+      - WEB3SIGNER_DOWNSTREAM_HTTP_PORT=8545
+      - WEB3SIGNER_DOWNSTREAM_HTTP_PATH=/
+      - WEB3SIGNER_LOG_LEVEL=info
     volumes:
       # 挂载配置文件（可选）
       - ./configs:/app/configs
       # 挂载日志（可选）
       - ./logs:/app/logs
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8545/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:9000/health"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -133,22 +142,30 @@ services:
 # 构建镜像
 docker build -t web3signer:latest .
 
+# 注意：Dockerfile 使用多阶段构建
+# 第一阶段：使用 golang:1.25-alpine 构建二进制文件
+# 第二阶段：使用 alpine:3.19 运行二进制文件
+# 最终镜像大小约 26.5MB
+
 # 运行容器（基础）
 docker run -d \
   --name web3signer \
-  -p 8545:8545 \
-  -e HTTP_HOST=0.0.0.0 \
-  -e HTTP_PORT=8545 \
-  -e KMS_ENDPOINT=https://kms.example.com \
-  -e KMS_ACCESS_KEY_ID=YOUR_ACCESS_KEY \
-  -e KMS_SECRET_KEY=YOUR_SECRET_KEY \
-  -e KMS_KEY_ID=YOUR_KEY_ID \
+  -p 9000:9000 \
+  -e WEB3SIGNER_HTTP_HOST=0.0.0.0 \
+  -e WEB3SIGNER_HTTP_PORT=9000 \
+  -e WEB3SIGNER_KMS_ENDPOINT=https://kms.example.com \
+  -e WEB3SIGNER_KMS_ACCESS_KEY_ID=YOUR_ACCESS_KEY \
+  -e WEB3SIGNER_KMS_SECRET_KEY=YOUR_SECRET_KEY \
+  -e WEB3SIGNER_KMS_KEY_ID=YOUR_KEY_ID \
+  -e WEB3SIGNER_DOWNSTREAM_HTTP_HOST=http://localhost \
+  -e WEB3SIGNER_DOWNSTREAM_HTTP_PORT=8545 \
+  -e WEB3SIGNER_DOWNSTREAM_HTTP_PATH=/ \
   web3signer:latest
 
 # 运行容器（指定配置文件）
 docker run -d \
   --name web3signer \
-  -p 8545:8545 \
+  -p 9000:9000 \
   -v /path/to/config:/app/configs:ro \
   web3signer:latest
 
@@ -156,7 +173,7 @@ docker run -d \
 docker run -d \
   --name web3signer \
   --network my-network \
-  -p 8545:8545 \
+  -p 9000:9000 \
   web3signer:latest
 
 # 资源限制
@@ -164,7 +181,7 @@ docker run -d \
   --name web3signer \
   --cpus="0.5" \
   --memory="512m" \
-  -p 8545:8545 \
+  -p 9000:9000 \
   web3signer:latest
 
 # 后台运行（生产）
@@ -174,7 +191,7 @@ docker run -d \
   --log-driver json-file \
   --log-opt max-size=10m \
   --log-opt max-file=5 \
-  -p 8545:8545 \
+  -p 9000:9000 \
   web3signer:latest
 ```
 
@@ -229,13 +246,16 @@ docker rm -f web3signer
 ./web3signer --config /etc/web3signer/config.yaml
 
 # 使用环境变量
-export HTTP_HOST=0.0.0.0
-export HTTP_PORT=8545
-export KMS_ENDPOINT=https://kms.example.com
-export KMS_ACCESS_KEY_ID=${KMS_ACCESS_KEY_ID}
-export KMS_SECRET_KEY=${KMS_SECRET_KEY}
-export KMS_KEY_ID=${KMS_KEY_ID}
-export LOG_LEVEL=info
+export WEB3SIGNER_HTTP_HOST=0.0.0.0
+export WEB3SIGNER_HTTP_PORT=9000
+export WEB3SIGNER_KMS_ENDPOINT=https://kms.example.com
+export WEB3SIGNER_KMS_ACCESS_KEY_ID=${KMS_ACCESS_KEY_ID}
+export WEB3SIGNER_KMS_SECRET_KEY=${KMS_SECRET_KEY}
+export WEB3SIGNER_KMS_KEY_ID=${KMS_KEY_ID}
+export WEB3SIGNER_DOWNSTREAM_HTTP_HOST=http://localhost
+export WEB3SIGNER_DOWNSTREAM_HTTP_PORT=8545
+export WEB3SIGNER_DOWNSTREAM_HTTP_PATH=/
+export WEB3SIGNER_LOG_LEVEL=info
 
 ./web3signer
 
@@ -280,26 +300,26 @@ export GOMEMLIMIT=512MiB
 
 | 参数 | 默认值 | 说明 | 环境变量 |
 |------|---------|------|-----------|
-| `--http-host` | 0.0.0.0 | HTTP 服务器监听地址 | HTTP_HOST |
-| `--http-port` | 8545 | HTTP 服务器监听端口 | HTTP_PORT |
-| `--log-level` | info | 日志级别 (debug/info/warn/error) | LOG_LEVEL |
+| `--http-host` | localhost | HTTP 服务器监听地址 | WEB3SIGNER_HTTP_HOST |
+| `--http-port` | 9000 | HTTP 服务器监听端口 | WEB3SIGNER_HTTP_PORT |
+| `--log-level` | info | 日志级别 (debug/info/warn/error/fatal) | WEB3SIGNER_LOG_LEVEL |
 
 #### MPC-KMS 配置
 
 | 参数 | 默认值 | 说明 | 环境变量 |
 |------|---------|------|-----------|
-| `--kms-endpoint` | - | MPC-KMS 服务端点 URL | KMS_ENDPOINT |
-| `--kms-access-key-id` | - | MPC-KMS 访问密钥 ID | KMS_ACCESS_KEY_ID |
-| `--kms-secret-key` | - | MPC-KMS 密钥（生产环境建议使用密钥管理） | KMS_SECRET_KEY |
-| `--kms-key-id` | - | 要使用的密钥 ID | KMS_KEY_ID |
+| `--kms-endpoint` | - | MPC-KMS 服务端点 URL | WEB3SIGNER_KMS_ENDPOINT |
+| `--kms-access-key-id` | - | MPC-KMS 访问密钥 ID | WEB3SIGNER_KMS_ACCESS_KEY_ID |
+| `--kms-secret-key` | - | MPC-KMS 密钥（生产环境建议使用密钥管理） | WEB3SIGNER_KMS_SECRET_KEY |
+| `--kms-key-id` | - | 要使用的密钥 ID | WEB3SIGNER_KMS_KEY_ID |
 
 #### 下游服务配置
 
 | 参数 | 默认值 | 说明 | 环境变量 |
 |------|---------|------|-----------|
-| `--downstream-http-host` | 127.0.0.1 | 下游 HTTP 服务主机 | DOWNSTREAM_HTTP_HOST |
-| `--downstream-http-port` | 8545 | 下游 HTTP 服务端口 | DOWNSTREAM_HTTP_PORT |
-| `--downstream-http-path` | / | 下游 HTTP 服务路径 | DOWNSTREAM_HTTP_PATH |
+| `--downstream-http-host` | http://localhost | 下游 HTTP 服务主机 | WEB3SIGNER_DOWNSTREAM_HTTP_HOST |
+| `--downstream-http-port` | 8545 | 下游 HTTP 服务端口 | WEB3SIGNER_DOWNSTREAM_HTTP_PORT |
+| `--downstream-http-path` | / | 下游 HTTP 服务路径 | WEB3SIGNER_DOWNSTREAM_HTTP_PATH |
 
 ### 配置文件示例
 
@@ -308,23 +328,21 @@ export GOMEMLIMIT=512MiB
 ```yaml
 http:
   host: 0.0.0.0
-  port: 8545
+  port: 9000
 
 kms:
   endpoint: https://kms.example.com
-  access_key_id: ${KMS_ACCESS_KEY_ID}
-  secret_key: ${KMS_SECRET_KEY}
-  key_id: ${KMS_KEY_ID}
+  access-key-id: ${KMS_ACCESS_KEY_ID}
+  secret-key: ${KMS_SECRET_KEY}
+  key-id: ${KMS_KEY_ID}
 
 downstream:
-  http_host: 127.0.0.1
-  http_port: 8545
-  http_path: /
+  http-host: http://localhost
+  http-port: 8545
+  http-path: /
 
-logging:
+log:
   level: info
-  format: json
-  output: /var/log/web3signer/web3signer.log
 ```
 
 创建开发环境配置 `configs/development.yaml`：
@@ -332,47 +350,51 @@ logging:
 ```yaml
 http:
   host: 0.0.0.0
-  port: 8545
+  port: 9000
 
 kms:
   endpoint: http://localhost:8080
-  access_key_id: test-key
-  secret_key: test-secret
-  key_id: test-key-id
+  access-key-id: test-key
+  secret-key: test-secret
+  key-id: test-key-id
 
 downstream:
-  http_host: localhost
-  http_port: 8545
+  http-host: http://localhost
+  http-port: 8545
+  http-path: /
 
-logging:
+log:
   level: debug
-  format: text
 ```
 
 ### 环境变量优先级
 
 1. 命令行参数（最高优先级）
-2. 环境变量
+2. 环境变量（使用 `WEB3SIGNER_` 前缀）
 3. 配置文件
+
+**注意**：环境变量需要添加 `WEB3SIGNER_` 前缀，例如：
+- `WEB3SIGNER_HTTP_HOST` 而不是 `HTTP_HOST`
+- `WEB3SIGNER_KMS_ENDPOINT` 而不是 `KMS_ENDPOINT`
 
 示例 `.env` 文件：
 
 ```bash
 # HTTP 服务器
-HTTP_HOST=0.0.0.0
-HTTP_PORT=8545
-LOG_LEVEL=info
+WEB3SIGNER_HTTP_HOST=0.0.0.0
+WEB3SIGNER_HTTP_PORT=9000
+WEB3SIGNER_LOG_LEVEL=info
 
 # MPC-KMS 配置
-KMS_ENDPOINT=https://kms.example.com
-KMS_ACCESS_KEY_ID=AK1234567890
-KMS_SECRET_KEY=your-secret-key-here
-KMS_KEY_ID=key-id-for-signing
+WEB3SIGNER_KMS_ENDPOINT=https://kms.example.com
+WEB3SIGNER_KMS_ACCESS_KEY_ID=AK1234567890
+WEB3SIGNER_KMS_SECRET_KEY=your-secret-key-here
+WEB3SIGNER_KMS_KEY_ID=key-id-for-signing
 
 # 下游服务
-DOWNSTREAM_HTTP_HOST=127.0.0.1
-DOWNSTREAM_HTTP_PORT=8545
-DOWNSTREAM_HTTP_PATH=/
+WEB3SIGNER_DOWNSTREAM_HTTP_HOST=http://localhost
+WEB3SIGNER_DOWNSTREAM_HTTP_PORT=8545
+WEB3SIGNER_DOWNSTREAM_HTTP_PATH=/
 
 # 运行时配置
 GOMAXPROCS=4
@@ -453,14 +475,14 @@ sudo systemctl stop web3signer
 
 ```bash
 # 使用 curl 检查
-curl http://localhost:8545/health
-curl http://localhost:8545/ready
+curl http://localhost:9000/health
+curl http://localhost:9000/ready
 
 # 使用 wget
-wget -qO- http://localhost:8545/health
+wget -qO- http://localhost:9000/health
 
 # 监控健康状态
-watch -n 5 'curl -s http://localhost:8545/health | jq'
+watch -n 5 'curl -s http://localhost:9000/health | jq'
 ```
 
 ### Kubernetes 健康检查
@@ -469,7 +491,7 @@ watch -n 5 'curl -s http://localhost:8545/health | jq'
 livenessProbe:
   httpGet:
     path: /health
-    port: 8545
+    port: 9000
     initialDelaySeconds: 5
     periodSeconds: 10
     timeoutSeconds: 3
@@ -478,7 +500,7 @@ livenessProbe:
 readinessProbe:
   httpGet:
     path: /ready
-    port: 8545
+    port: 9000
     initialDelaySeconds: 10
     periodSeconds: 5
     timeoutSeconds: 3
@@ -632,6 +654,36 @@ groups:
 
 ### 常见问题
 
+#### 0. Docker 构建失败
+
+**症状**: Docker 构建过程中出现各种错误
+
+**常见问题和解决方案**:
+
+1. **Go 版本不匹配**:
+   ```
+   go: go.mod requires go >= 1.25.1 (running go 1.21.13)
+   ```
+   **解决方案**: 确保 Dockerfile 使用正确的 Go 版本（当前为 1.25-alpine）
+
+2. **COPY 命令语法错误**:
+   ```
+   failed to calculate checksum of ref: "/||": not found
+   ```
+   **解决方案**: Docker 的 COPY 命令不支持 shell 重定向语法，移除 `2>/dev/null || true`
+
+3. **用户创建错误**:
+   ```
+   addgroup: invalid number 'web3signer'
+   ```
+   **解决方案**: `addgroup` 和 `adduser` 命令需要数字 UID/GID，使用数字如 `1001`
+
+4. **HEALTHCHECK 命令错误**:
+   ```
+   HEALTHCHECK 命令语法错误
+   ```
+   **解决方案**: 使用正确的语法，如 `CMD curl -f http://localhost:9000/health || exit 1`
+
 #### 1. 端口被占用
 
 **症状**: 启动失败，提示 "address already in use"
@@ -640,14 +692,14 @@ groups:
 
 ```bash
 # 查找占用端口的进程
-sudo lsof -i :8545
-sudo netstat -tulpn | grep :8545
+sudo lsof -i :9000
+sudo netstat -tulpn | grep :9000
 
 # 杀死进程
 sudo kill -9 <PID>
 
 # 或者更换端口
-./web3signer --http-port 8546
+./web3signer --http-port 9001
 ```
 
 #### 2. KMS 连接失败
@@ -731,7 +783,7 @@ sudo swapon /swapfile
 ping 127.0.0.1
 
 # 测试下游服务
-curl http://127.0.0.1:8545/health
+curl http://localhost:8545/health
 
 # 使用负载均衡（如果有多个下游实例）
 # 在配置文件中指定多个下游地址
@@ -912,14 +964,11 @@ kubectl rollout status deployment/web3signer
 ### 常用命令速查
 
 ```bash
-# 查看版本
-./web3signer --version
-
 # 查看帮助
 ./web3signer --help
 
 # 健康检查
-curl http://localhost:8545/health
+curl http://localhost:9000/health
 
 # 查看日志
 docker logs -f web3signer
@@ -931,7 +980,7 @@ docker exec -it web3signer sh
 docker restart web3signer
 
 # 查看端口占用
-sudo lsof -i :8545
+sudo lsof -i :9000
 ```
 
 ### 配置检查清单

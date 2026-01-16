@@ -2,7 +2,7 @@
 # Builds a minimal and secure Docker image
 
 # Stage 1: Builder
-FROM golang:1.21-alpine AS builder
+FROM golang:1.25-alpine AS builder
 
 # Set working directory
 WORKDIR /app
@@ -32,12 +32,12 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
 # Stage 2: Runtime
 FROM alpine:3.19
 
-# Install ca-certificates and tzdata
-RUN apk add --no-cache ca-certificates tzdata
+# Install ca-certificates, tzdata and curl for health checks
+RUN apk add --no-cache ca-certificates tzdata curl
 
 # Create non-root user
-RUN addgroup -g web3signer web3signer && \
-    adduser -D -G web3signer -u web3signer web3signer
+RUN addgroup -g 1001 web3signer && \
+    adduser -D -G web3signer -u 1001 web3signer
 
 # Set working directory
 WORKDIR /app
@@ -45,23 +45,22 @@ WORKDIR /app
 # Copy binary from builder
 COPY --from=builder --chown=web3signer:web3signer /app/web3signer /app/
 
-# Copy config files if any
-COPY --chown=web3signer:web3signer configs/ /app/configs/ 2>/dev/null || true
+# Copy config files if any (only if configs directory exists)
+COPY --chown=web3signer:web3signer configs/ /app/configs/
 
 # Set timezone
 ENV TZ=Asia/Shanghai
 
 # Expose HTTP port
-EXPOSE 8545
+EXPOSE 9000
 
-# Health check
+# Health check using curl to check HTTP endpoints
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-  CMD ["/app/web3signer", "health", "--http-host", "0.0.0.0"] || \
-  ["/app/web3signer", "ready", "--http-host", "0.0.0.0"]
+  CMD curl -f http://localhost:9000/health || exit 1
 
 # Run as non-root user
 USER web3signer
 
 # Use dumb-init to handle signals properly
 ENTRYPOINT ["/app/web3signer"]
-CMD ["--help"]
+CMD ["--http-host", "0.0.0.0", "--http-port", "9000"]
