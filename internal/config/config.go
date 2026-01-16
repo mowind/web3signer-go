@@ -64,9 +64,9 @@ func (c *KMSConfig) Validate() error {
 
 // DownstreamConfig 定义下游服务配置
 type DownstreamConfig struct {
-	HTTPHost string `mapstructure:"http-host"`
-	HTTPPort int    `mapstructure:"http-port"`
-	HTTPPath string `mapstructure:"http-path"`
+	HTTPHost string `mapstructure:"http-host"`  // 完整的host，如 http://127.0.0.1 或 https://api.example.com
+	HTTPPort int    `mapstructure:"http-port"`  // 端口，如果host中已包含端口或不需要端口，可以为0
+	HTTPPath string `mapstructure:"http-path"`  // 路径，如 /api/v1/jsonrpc
 }
 
 // Validate 验证下游服务配置
@@ -74,13 +74,66 @@ func (c *DownstreamConfig) Validate() error {
 	if c.HTTPHost == "" {
 		return fmt.Errorf("downstream-http-host is required")
 	}
-	if c.HTTPPort <= 0 || c.HTTPPort > MaxPort {
-		return fmt.Errorf("downstream-http-port must be between 1 and %d", MaxPort)
+	// 验证host格式
+	if !strings.HasPrefix(c.HTTPHost, "http://") && !strings.HasPrefix(c.HTTPHost, "https://") {
+		return fmt.Errorf("downstream-http-host must start with http:// or https://")
+	}
+	if c.HTTPPort < 0 || c.HTTPPort > MaxPort {
+		return fmt.Errorf("downstream-http-port must be between 0 and %d", MaxPort)
 	}
 	if c.HTTPPath == "" {
 		return fmt.Errorf("downstream-http-path is required")
 	}
+	// 确保路径以/开头
+	if !strings.HasPrefix(c.HTTPPath, "/") {
+		c.HTTPPath = "/" + c.HTTPPath
+	}
 	return nil
+}
+
+// BuildURL 构建完整的下游服务URL
+func (c *DownstreamConfig) BuildURL() string {
+	baseURL := c.HTTPHost
+	// 如果指定了端口且端口大于0，添加到host中
+	if c.HTTPPort > 0 {
+		// 检查host是否已经包含端口
+		if !hasPort(baseURL) {
+			// 移除可能的尾部斜杠
+			baseURL = strings.TrimSuffix(baseURL, "/")
+			baseURL = fmt.Sprintf("%s:%d", baseURL, c.HTTPPort)
+		}
+	}
+	// 添加路径
+	return baseURL + c.HTTPPath
+}
+
+// hasPort 检查URL是否已经包含端口
+func hasPort(url string) bool {
+	// 简单的端口检查逻辑
+	// 移除协议部分
+	url = strings.TrimPrefix(url, "http://")
+	url = strings.TrimPrefix(url, "https://")
+
+	// 查找最后一个冒号（可能是端口分隔符）
+	lastColon := strings.LastIndex(url, ":")
+	if lastColon == -1 {
+		return false
+	}
+
+	// 检查冒号后的部分是否为数字
+	portPart := url[lastColon+1:]
+	// 检查是否包含路径分隔符
+	if strings.Contains(portPart, "/") {
+		return false
+	}
+
+	// 尝试解析为端口号
+	for _, ch := range portPart {
+		if ch < '0' || ch > '9' {
+			return false
+		}
+	}
+	return true
 }
 
 // LogConfig 定义日志配置

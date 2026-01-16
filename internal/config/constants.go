@@ -20,8 +20,8 @@ const (
 	// DefaultHTTPPort 默认 HTTP 端口
 	DefaultHTTPPort = 9000
 
-	// DefaultDownstreamHost 默认下游服务主机
-	DefaultDownstreamHost = "localhost"
+	// DefaultDownstreamHost 默认下游服务主机（完整URL）
+	DefaultDownstreamHost = "http://localhost"
 	// DefaultDownstreamPort 默认下游服务端口
 	DefaultDownstreamPort = 8545
 	// DefaultDownstreamPath 默认下游服务路径
