@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
+	"strings"
 
 	"github.com/mowind/web3signer-go/internal/jsonrpc"
 	"github.com/mowind/web3signer-go/internal/signer"
@@ -71,9 +72,9 @@ func (h *SignHandler) handleEthSign(ctx context.Context, request *jsonrpc.Reques
 		return h.CreateInvalidParamsResponse(request.ID, fmt.Sprintf("Invalid parameters: %v", err)), nil
 	}
 
-	// 验证地址匹配
+	// 验证地址匹配（转换为小写比较）
 	expectedAddress := h.signer.Address().String()
-	if address != expectedAddress {
+	if strings.ToLower(address) != strings.ToLower(expectedAddress) {
 		h.logger.WithFields(logrus.Fields{
 			"expected": expectedAddress,
 			"provided": address,
@@ -109,9 +110,9 @@ func (h *SignHandler) handleEthSignTransaction(ctx context.Context, request *jso
 
 	h.logger.WithField("from", txParams.From).Debug("Processing eth_signTransaction request")
 
-	// 验证 from 地址匹配
+	// 验证 from 地址匹配（转换为小写比较）
 	expectedAddress := h.signer.Address().String()
-	if txParams.From != expectedAddress {
+	if strings.ToLower(txParams.From) != strings.ToLower(expectedAddress) {
 		h.logger.WithFields(logrus.Fields{
 			"expected": expectedAddress,
 			"provided": txParams.From,
