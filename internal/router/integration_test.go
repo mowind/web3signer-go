@@ -125,11 +125,11 @@ func TestIntegration_CompleteFlow(t *testing.T) {
 			expectError: false,
 		},
 		{
-			name:           "eth_accounts - returns empty array",
+			name:           "eth_accounts - returns KMS address",
 			method:         "eth_accounts",
 			params:         json.RawMessage(`[]`),
 			expectError:    false,
-			expectedResult: []interface{}{}, // 空数组
+			expectedResult: []string{"0x1234567890123456789012345678901234567890"},
 		},
 		{
 			name:           "eth_getBalance - forwarded to downstream",
@@ -187,8 +187,15 @@ func TestIntegration_CompleteFlow(t *testing.T) {
 				// 简单的结果验证
 				switch tc.method {
 				case "eth_accounts":
-					if len(result.([]interface{})) != 0 {
-						t.Errorf("Expected empty array for eth_accounts, got %v", result)
+					accounts, ok := result.([]interface{})
+					if !ok {
+						t.Fatalf("Expected array for eth_accounts, got %T", result)
+					}
+					if len(accounts) != 1 {
+						t.Errorf("Expected 1 address for eth_accounts, got %d", len(accounts))
+					}
+					if accounts[0] != "0x1234567890123456789012345678901234567890" {
+						t.Errorf("Expected address 0x1234567890123456789012345678901234567890, got %v", accounts[0])
 					}
 				case "eth_getBalance", "eth_unknownMethod":
 					if result != tc.expectedResult {

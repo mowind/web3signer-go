@@ -43,6 +43,7 @@ type KMSConfig struct {
 	AccessKeyID string `mapstructure:"access-key-id"`
 	SecretKey   string `mapstructure:"secret-key"`
 	KeyID       string `mapstructure:"key-id"`
+	Address     string `mapstructure:"address"` // KMS管理的以太坊地址
 }
 
 // Validate 验证 KMS 配置
@@ -58,6 +59,9 @@ func (c *KMSConfig) Validate() error {
 	}
 	if c.KeyID == "" {
 		return fmt.Errorf("kms-key-id is required")
+	}
+	if c.Address == "" {
+		return fmt.Errorf("kms-address is required")
 	}
 	return nil
 }

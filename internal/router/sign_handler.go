@@ -26,6 +26,16 @@ func NewSignHandler(mpcSigner *signer.MPCKMSSigner, logger *logrus.Logger) *Sign
 	}
 }
 
+// handleEthAccounts 处理 eth_accounts 方法
+func (h *SignHandler) handleEthAccounts(ctx context.Context, request *jsonrpc.Request) (*jsonrpc.Response, error) {
+	// 返回KMS管理的地址
+	kmsAddress := h.signer.Address().String()
+
+	h.logger.WithField("address", kmsAddress).Debug("Returning KMS managed address for eth_accounts")
+
+	return h.CreateSuccessResponse(request.ID, []string{kmsAddress})
+}
+
 // Method 返回处理器支持的方法名
 func (h *SignHandler) Method() string {
 	return "sign_handler" // 这个处理器处理多个方法
@@ -37,6 +47,8 @@ func (h *SignHandler) Handle(ctx context.Context, request *jsonrpc.Request) (*js
 
 	// 根据方法名分发到具体的处理函数
 	switch request.Method {
+	case "eth_accounts":
+		return h.handleEthAccounts(ctx, request)
 	case "eth_sign":
 		return h.handleEthSign(ctx, request)
 	case "eth_signTransaction":
@@ -150,7 +162,7 @@ func (h *SignHandler) handleEthSendTransaction(ctx context.Context, request *jso
 // IsSignMethod 检查是否为签名方法
 func IsSignMethod(method string) bool {
 	switch method {
-	case "eth_sign", "eth_signTransaction", "eth_sendTransaction":
+	case "eth_accounts", "eth_sign", "eth_signTransaction", "eth_sendTransaction":
 		return true
 	default:
 		return false

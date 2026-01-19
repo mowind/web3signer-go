@@ -90,11 +90,11 @@ func TestEndToEnd_CompleteIntegration(t *testing.T) {
 			expectError: false,
 		},
 		{
-			name:           "eth_accounts - returns empty array",
+			name:           "eth_accounts - returns KMS address",
 			method:         "eth_accounts",
 			params:         []interface{}{},
 			expectError:    false,
-			expectedResult: []interface{}{},
+			expectedResult: []interface{}{"0x1234567890123456789012345678901234567890"},
 		},
 		{
 			name:           "eth_getBalance - forwarded to downstream",

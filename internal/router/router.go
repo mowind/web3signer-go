@@ -3,6 +3,8 @@ package router
 import (
 	"context"
 	"fmt"
+	"io"
+	"net/http"
 	"sync"
 
 	"github.com/mowind/web3signer-go/internal/jsonrpc"
@@ -176,4 +178,49 @@ func (r *Router) GetRegisteredMethods() []string {
 func (r *Router) HasHandler(method string) bool {
 	_, found := r.getHandler(method)
 	return found
+}
+
+// HandleHTTPRequest 处理HTTP请求（用于集成到HTTP服务器）
+func (r *Router) HandleHTTPRequest(w http.ResponseWriter, req *http.Request) {
+	body, err := io.ReadAll(req.Body)
+	if err != nil {
+		r.logger.WithError(err).Error("Failed to read request body")
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		if _, err := w.Write([]byte(`{"jsonrpc":"2.0","error":{"code":-32700,"message":"Parse error"},"id":null}`)); err != nil {
+			r.logger.WithError(err).Error("Failed to write error response")
+		}
+		return
+	}
+
+	requests, err := jsonrpc.ParseRequest(body)
+	if err != nil {
+		r.logger.WithError(err).Warn("Failed to parse JSON-RPC request")
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		resp := jsonrpc.NewErrorResponse(nil, jsonrpc.ParseError)
+		data, _ := jsonrpc.MarshalResponse(resp)
+		if _, err := w.Write(data); err != nil {
+			r.logger.WithError(err).Error("Failed to write error response")
+		}
+		return
+	}
+
+	responses := make([]*jsonrpc.Response, 0, len(requests))
+	for i := range requests {
+		resp := r.Route(context.Background(), &requests[i])
+		responses = append(responses, resp)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	data, err := jsonrpc.MarshalResponses(responses)
+	if err != nil {
+		r.logger.WithError(err).Error("Failed to marshal JSON-RPC responses")
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	if _, err := w.Write(data); err != nil {
+		r.logger.WithError(err).Error("Failed to write response")
+	}
 }

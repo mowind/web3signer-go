@@ -62,6 +62,13 @@ var flags = []Flag{
 		BindTo:       "kms.key-id",
 		Required:     true,
 	},
+	{
+		Name:         "kms-address",
+		DefaultValue: "",
+		Description:  "Ethereum address managed by MPC-KMS (required)",
+		BindTo:       "kms.address",
+		Required:     true,
+	},
 
 	// 下游服务配置
 	{

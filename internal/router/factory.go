@@ -32,6 +32,13 @@ func (f *RouterFactory) CreateRouter(mpcSigner *signer.MPCKMSSigner, downstreamC
 	// 在实际实现中，我们可能需要一个更智能的路由机制
 	if err := router.Register(&MethodHandler{
 		handler: signHandler,
+		method:  "eth_accounts",
+	}); err != nil {
+		f.logger.WithError(err).Error("Failed to register eth_accounts handler")
+	}
+
+	if err := router.Register(&MethodHandler{
+		handler: signHandler,
 		method:  "eth_sign",
 	}); err != nil {
 		f.logger.WithError(err).Error("Failed to register eth_sign handler")
