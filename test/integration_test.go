@@ -67,13 +67,13 @@ func TestEndToEnd_CompleteIntegration(t *testing.T) {
 		{
 			name:        "eth_sign - success",
 			method:      "eth_sign",
-			params:      []interface{}{"0x1234567890123456789012345678901234567890", "0xdeadbeef"},
+			params:      []interface{}{"0x1234567890123456789012345678901234567890", "0x000000000000000000000000000000000000000000000000000000000000dead"},
 			expectError: false,
 		},
 		{
 			name:        "eth_sign - wrong address",
 			method:      "eth_sign",
-			params:      []interface{}{"0xwrongaddress", "0xdeadbeef"},
+			params:      []interface{}{"0xwrongaddress", "0x000000000000000000000000000000000000000000000000000000000000dead"},
 			expectError: true,
 		},
 		{
@@ -221,7 +221,7 @@ func TestEndToEnd_BatchRequests(t *testing.T) {
 		{
 			"jsonrpc": "2.0",
 			"method":  "eth_sign",
-			"params":  []interface{}{"0x1234567890123456789012345678901234567890", "0xdeadbeef"},
+			"params":  []interface{}{"0x1234567890123456789012345678901234567890", "0x000000000000000000000000000000000000000000000000000000000000dead"},
 			"id":      1,
 		},
 		{
@@ -389,7 +389,7 @@ func TestEndToEnd_ErrorHandling(t *testing.T) {
 		routerFactory := router.NewRouterFactory(logger)
 		router := routerFactory.CreateRouter(mpcSigner, downstreamClient)
 
-		// 测试转发请求
+		// 测试请求转发到下游服务（需要调用downstream的方法）
 		request := &jsonrpc.Request{
 			JSONRPC: "2.0",
 			Method:  "eth_getBalance",
@@ -452,7 +452,7 @@ func TestEndToEnd_ConcurrentRequests(t *testing.T) {
 			request := map[string]interface{}{
 				"jsonrpc": "2.0",
 				"method":  "eth_sign",
-				"params":  []interface{}{"0x1234567890123456789012345678901234567890", fmt.Sprintf("0xdeadbeef%d", id)},
+				"params":  []interface{}{"0x1234567890123456789012345678901234567890", "0x000000000000000000000000000000000000000000000000000000000000dead"},
 				"id":      id,
 			}
 

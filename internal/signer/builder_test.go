@@ -216,7 +216,7 @@ func TestParseTransactionParams(t *testing.T) {
 }
 
 func TestParseSignParams(t *testing.T) {
-	jsonParams := `["0x1234567890123456789012345678901234567890", "0xdeadbeef"]`
+	jsonParams := `["0x1234567890123456789012345678901234567890", "0x000000000000000000000000000000000000000000000000000000000000dead"]`
 
 	var rawParams json.RawMessage
 	if err := json.Unmarshal([]byte(jsonParams), &rawParams); err != nil {
@@ -232,9 +232,13 @@ func TestParseSignParams(t *testing.T) {
 		t.Errorf("Expected address %s, got %s", "0x1234567890123456789012345678901234567890", address)
 	}
 
-	expectedData, _ := hex.DecodeString("deadbeef")
+	expectedData, _ := hex.DecodeString("000000000000000000000000000000000000000000000000000000000000dead")
 	if !bytes.Equal(data, expectedData) {
 		t.Errorf("Expected data %x, got %x", expectedData, data)
+	}
+
+	if len(data) != 32 {
+		t.Errorf("Expected data length 32, got %d", len(data))
 	}
 }
 

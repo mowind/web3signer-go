@@ -74,7 +74,10 @@ func TestMPCKMSSigner_Address(t *testing.T) {
 }
 
 func TestMPCKMSSigner_Sign(t *testing.T) {
-	expectedHash := []byte("test_hash_to_sign")
+	expectedHash := make([]byte, 32)
+	for i := 0; i < 32; i++ {
+		expectedHash[i] = byte(i)
+	}
 
 	client := &mockKMSClient{
 		signFunc: func(ctx context.Context, keyID string, message []byte) ([]byte, error) {
@@ -340,7 +343,7 @@ func TestMPCKMSSigner_Sign_KMSError(t *testing.T) {
 	address := ethgo.HexToAddress("0x1234567890123456789012345678901234567890")
 	signer := NewMPCKMSSigner(client, "test-key-id", address)
 
-	_, err := signer.Sign([]byte("test_hash"))
+	_, err := signer.Sign(make([]byte, 32))
 	if err == nil {
 		t.Error("Expected error when KMS fails, got none")
 	}

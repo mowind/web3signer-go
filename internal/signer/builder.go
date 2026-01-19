@@ -271,6 +271,10 @@ func ParseSignParams(params json.RawMessage) (address string, data []byte, err e
 		return "", nil, fmt.Errorf("failed to parse data: %v", err)
 	}
 
+	if len(data) != 32 {
+		return "", nil, fmt.Errorf("invalid data length: expected 32 bytes, got %d", len(data))
+	}
+
 	return address, data, nil
 }
 

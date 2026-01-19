@@ -32,16 +32,17 @@ func (s *MPCKMSSigner) Address() ethgo.Address {
 
 // Sign 对哈希进行签名（实现 ethgo.Key 接口）
 func (s *MPCKMSSigner) Sign(hash []byte) ([]byte, error) {
-	// 将哈希转换为十六进制字符串
+	if len(hash) != 32 {
+		return nil, fmt.Errorf("invalid hash length: expected 32 bytes, got %d", len(hash))
+	}
+
 	hashHex := hex.EncodeToString(hash)
 
-	// 调用 MPC-KMS 进行签名
 	signatureHex, err := s.client.Sign(context.Background(), s.keyID, []byte(hashHex))
 	if err != nil {
 		return nil, fmt.Errorf("failed to sign with MPC-KMS: %v", err)
 	}
 
-	// 将十六进制签名转换回字节
 	signature, err := hex.DecodeString(string(signatureHex))
 	if err != nil {
 		return nil, fmt.Errorf("failed to decode signature: %v", err)

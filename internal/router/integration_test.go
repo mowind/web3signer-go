@@ -101,14 +101,14 @@ func TestIntegration_CompleteFlow(t *testing.T) {
 		{
 			name:           "eth_sign - success",
 			method:         "eth_sign",
-			params:         json.RawMessage(`["0x1234567890123456789012345678901234567890", "0xdeadbeef"]`),
+			params:         json.RawMessage(`["0x1234567890123456789012345678901234567890", "0x000000000000000000000000000000000000000000000000000000000000dead"]`),
 			expectError:    false,
 			expectedResult: "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f40", // 模拟签名
 		},
 		{
 			name:        "eth_sign - wrong address",
 			method:      "eth_sign",
-			params:      json.RawMessage(`["0xwrongaddress", "0xdeadbeef"]`),
+			params:      json.RawMessage(`["0xwrongaddress", "0x000000000000000000000000000000000000000000000000000000000000dead"]`),
 			expectError: true,
 		},
 		{
@@ -229,7 +229,7 @@ func TestIntegration_BatchRequests(t *testing.T) {
 			JSONRPC: "2.0",
 			Method:  "eth_sign",
 			ID:      "id1",
-			Params:  json.RawMessage(`["0x1234567890123456789012345678901234567890", "0xdeadbeef"]`),
+			Params:  json.RawMessage(`["0x1234567890123456789012345678901234567890", "0x000000000000000000000000000000000000000000000000000000000000dead"]`),
 		},
 		{
 			JSONRPC: "2.0",

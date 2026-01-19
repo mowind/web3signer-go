@@ -122,7 +122,7 @@ func (c *Client) Do(req *http.Request) (*http.Response, error) {
 
 // Sign 调用 MPC-KMS 签名端点
 func (c *Client) Sign(ctx context.Context, keyID string, message []byte) ([]byte, error) {
-	return c.SignWithOptions(ctx, keyID, message, DataEncodingPlain, nil, "")
+	return c.SignWithOptions(ctx, keyID, message, DataEncodingHex, nil, "")
 }
 
 // SignWithOptions 调用 MPC-KMS 签名端点，支持更多选项
