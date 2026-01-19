@@ -242,6 +242,22 @@ func TestBuilder_createGinRouter_handleJSONRPCRequest(t *testing.T) {
 			t.Errorf("Expected Content-Type application/json, got %s", contentType)
 		}
 	})
+
+	t.Run("CORS preflight request", func(t *testing.T) {
+		req := httptest.NewRequest("OPTIONS", "/", nil)
+		w := httptest.NewRecorder()
+
+		router.ServeHTTP(w, req)
+
+		if w.Code != http.StatusNoContent {
+			t.Errorf("Expected status 204, got %d", w.Code)
+		}
+
+		corsHeader := w.Header().Get("Access-Control-Allow-Origin")
+		if corsHeader != "*" {
+			t.Errorf("Expected Access-Control-Allow-Origin *, got %s", corsHeader)
+		}
+	})
 }
 
 func TestBuilder_createGinRouter_Build(t *testing.T) {

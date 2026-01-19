@@ -64,6 +64,7 @@ func (b *Builder) setGinMode() {
 func (b *Builder) createGinRouter(jsonRPCRouter *router.Router, logger *logrus.Logger) *gin.Engine {
 	router := gin.New()
 	router.Use(gin.Recovery())
+	router.Use(b.corsMiddleware())
 
 	if b.cfg.Log.Level == config.LogLevelDebug {
 		router.Use(gin.Logger())
@@ -71,6 +72,7 @@ func (b *Builder) createGinRouter(jsonRPCRouter *router.Router, logger *logrus.L
 
 	// JSON-RPC端点，路由到jsonRPCRouter
 	router.POST("/", b.handleJSONRPCRequest(jsonRPCRouter))
+	router.OPTIONS("/", b.handleJSONRPCRequest(jsonRPCRouter))
 
 	// 健康检查端点
 	router.GET("/health", b.healthHandler(logger))
@@ -113,5 +115,21 @@ func (b *Builder) readyHandler(logger *logrus.Logger) gin.HandlerFunc {
 func (b *Builder) handleJSONRPCRequest(jsonRPCRouter *router.Router) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		jsonRPCRouter.HandleHTTPRequest(c.Writer, c.Request)
+	}
+}
+
+// corsMiddleware 处理CORS请求
+func (b *Builder) corsMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
+		c.Writer.Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS")
+		c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+
+		if c.Request.Method == "OPTIONS" {
+			c.AbortWithStatus(204)
+			return
+		}
+
+		c.Next()
 	}
 }
