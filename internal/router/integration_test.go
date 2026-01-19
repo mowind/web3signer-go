@@ -50,6 +50,9 @@ type testDownstreamClient struct{}
 
 func (c *testDownstreamClient) ForwardRequest(ctx context.Context, req *jsonrpc.Request) (*jsonrpc.Response, error) {
 	// 模拟下游服务响应
+	if req.Method == "eth_sendRawTransaction" {
+		return jsonrpc.NewResponse(req.ID, "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef")
+	}
 	return jsonrpc.NewResponse(req.ID, "downstream_result")
 }
 
@@ -123,6 +126,20 @@ func TestIntegration_CompleteFlow(t *testing.T) {
 				"nonce": "5"
 			}]`),
 			expectError: false,
+		},
+		{
+			name:   "eth_sendTransaction - signs and forwards",
+			method: "eth_sendTransaction",
+			params: json.RawMessage(`[{
+				"from": "0x1234567890123456789012345678901234567890",
+				"to": "0x0987654321098765432109876543210987654321",
+				"gas": "21000",
+				"gasPrice": "20000000000",
+				"value": "1000000000000000000",
+				"nonce": "6"
+			}]`),
+			expectError:    false,
+			expectedResult: "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
 		},
 		{
 			name:           "eth_accounts - returns KMS address",

@@ -3,9 +3,11 @@ package router
 import (
 	"context"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"strings"
 
+	"github.com/mowind/web3signer-go/internal/downstream"
 	"github.com/mowind/web3signer-go/internal/jsonrpc"
 	"github.com/mowind/web3signer-go/internal/signer"
 	"github.com/sirupsen/logrus"
@@ -16,14 +18,16 @@ type SignHandler struct {
 	*BaseHandler
 	signer  *signer.MPCKMSSigner
 	builder *signer.TransactionBuilder
+	client  downstream.ClientInterface
 }
 
 // NewSignHandler 创建签名处理器
-func NewSignHandler(mpcSigner *signer.MPCKMSSigner, logger *logrus.Logger) *SignHandler {
+func NewSignHandler(mpcSigner *signer.MPCKMSSigner, client downstream.ClientInterface, logger *logrus.Logger) *SignHandler {
 	return &SignHandler{
 		BaseHandler: NewBaseHandler("sign", logger),
 		signer:      mpcSigner,
 		builder:     signer.NewTransactionBuilder(),
+		client:      client,
 	}
 }
 
@@ -141,23 +145,77 @@ func (h *SignHandler) handleEthSignTransaction(ctx context.Context, request *jso
 
 // handleEthSendTransaction 处理 eth_sendTransaction 方法
 func (h *SignHandler) handleEthSendTransaction(ctx context.Context, request *jsonrpc.Request) (*jsonrpc.Response, error) {
-	// 首先执行签名逻辑（与 eth_signTransaction 相同）
-	signResponse, err := h.handleEthSignTransaction(ctx, request)
+	txParams, err := signer.ParseTransactionParams(request.Params)
 	if err != nil {
-		return nil, err
+		h.logger.WithError(err).Warn("Failed to parse eth_sendTransaction params")
+		return h.CreateInvalidParamsResponse(request.ID, fmt.Sprintf("Invalid transaction parameters: %v", err)), nil
 	}
 
-	// 如果签名失败，直接返回错误
-	if signResponse.Error != nil {
-		return signResponse, nil
+	h.logger.WithField("from", txParams.From).Debug("Processing eth_sendTransaction request")
+
+	expectedAddress := h.signer.Address().String()
+	if strings.ToLower(txParams.From) != strings.ToLower(expectedAddress) {
+		h.logger.WithFields(logrus.Fields{
+			"expected": expectedAddress,
+			"provided": txParams.From,
+		}).Warn("From address mismatch in eth_sendTransaction")
+		return h.CreateInvalidParamsResponse(request.ID, "From address mismatch"), nil
 	}
 
-	// 注意：实际的 eth_sendTransaction 需要转发到下游服务
-	// 这里我们只处理签名部分，转发由专门的 ForwardHandler 处理
-	h.logger.Debug("eth_sendTransaction signing completed, forwarding required")
+	tx, err := h.builder.BuildTransaction(*txParams)
+	if err != nil {
+		h.logger.WithError(err).Error("Failed to build transaction")
+		return h.CreateInvalidParamsResponse(request.ID, fmt.Sprintf("Failed to build transaction: %v", err)), nil
+	}
 
-	// 返回签名后的交易数据，由上层路由决定是否转发
-	return signResponse, nil
+	signedTx, err := h.signer.SignTransaction(tx)
+	if err != nil {
+		h.logger.WithError(err).Error("Failed to sign transaction")
+		return h.CreateErrorResponse(request.ID, jsonrpc.CodeInternalError,
+			"Failed to sign transaction", err.Error()), nil
+	}
+
+	rlpBytes := make([]byte, 0)
+	rlpBytes, err = signedTx.MarshalRLPTo(rlpBytes)
+	if err != nil {
+		h.logger.WithError(err).Error("Failed to marshal transaction to RLP")
+		return h.CreateErrorResponse(request.ID, jsonrpc.CodeInternalError,
+			"Failed to marshal transaction", err.Error()), nil
+	}
+
+	rawTxHex := "0x" + hex.EncodeToString(rlpBytes)
+
+	paramsBytes, err := json.Marshal([]interface{}{rawTxHex})
+	if err != nil {
+		h.logger.WithError(err).Error("Failed to marshal eth_sendRawTransaction params")
+		return h.CreateErrorResponse(request.ID, jsonrpc.CodeInternalError,
+			"Failed to create forward request", err.Error()), nil
+	}
+
+	forwardRequest := &jsonrpc.Request{
+		JSONRPC: "2.0",
+		Method:  "eth_sendRawTransaction",
+		Params:  paramsBytes,
+		ID:      request.ID,
+	}
+
+	forwardResponse, err := h.client.ForwardRequest(ctx, forwardRequest)
+	if err != nil {
+		h.logger.WithError(err).Error("Failed to forward eth_sendRawTransaction to downstream")
+		return h.CreateErrorResponse(request.ID, jsonrpc.CodeInternalError,
+			"Failed to forward transaction", err.Error()), nil
+	}
+
+	if forwardResponse.Error != nil {
+		h.logger.WithField("error", forwardResponse.Error.Message).Error("Downstream returned error")
+		return h.CreateErrorResponse(request.ID, forwardResponse.Error.Code,
+			forwardResponse.Error.Message, forwardResponse.Error.Data), nil
+	}
+
+	h.logger.Debug("eth_sendTransaction completed successfully")
+	forwardResponse.ID = request.ID
+	forwardResponse.JSONRPC = jsonrpc.JSONRPCVersion
+	return forwardResponse, nil
 }
 
 // IsSignMethod 检查是否为签名方法
