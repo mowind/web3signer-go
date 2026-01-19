@@ -29,7 +29,7 @@ func (m *mockKMSClient) Sign(ctx context.Context, keyID string, message []byte) 
 	// 返回一个有效的十六进制编码的签名（65字节）
 	signature := make([]byte, 65)
 	for i := 0; i < 65; i++ {
-		signature[i] = byte(i)
+		signature[i] = byte(i + 1)
 	}
 	return []byte(hex.EncodeToString(signature)), nil
 }
@@ -65,7 +65,7 @@ func (m *mockKMSClient) Do(req *http.Request) (*http.Response, error) {
 func TestMPCKMSSigner_Address(t *testing.T) {
 	expectedAddress := ethgo.HexToAddress("0x1234567890123456789012345678901234567890")
 	client := &mockKMSClient{}
-	signer := NewMPCKMSSigner(client, "test-key-id", expectedAddress)
+	signer := NewMPCKMSSigner(client, "test-key-id", expectedAddress, big.NewInt(1))
 
 	address := signer.Address()
 	if address != expectedAddress {
@@ -101,7 +101,7 @@ func TestMPCKMSSigner_Sign(t *testing.T) {
 	}
 
 	address := ethgo.HexToAddress("0x1234567890123456789012345678901234567890")
-	signer := NewMPCKMSSigner(client, "test-key-id", address)
+	signer := NewMPCKMSSigner(client, "test-key-id", address, big.NewInt(1))
 
 	signature, err := signer.Sign(expectedHash)
 	if err != nil {
@@ -131,14 +131,14 @@ func TestMPCKMSSigner_SignTransaction(t *testing.T) {
 			// 返回一个模拟的 65 字节签名
 			signature := make([]byte, 65)
 			for i := 0; i < 65; i++ {
-				signature[i] = byte(i)
+				signature[i] = byte(i + 1)
 			}
 			return []byte(hex.EncodeToString(signature)), nil
 		},
 	}
 
 	address := ethgo.HexToAddress("0x1234567890123456789012345678901234567890")
-	signer := NewMPCKMSSigner(client, "test-key-id", address)
+	signer := NewMPCKMSSigner(client, "test-key-id", address, big.NewInt(1))
 
 	signedTx, err := signer.SignTransaction(tx)
 	if err != nil {
@@ -212,7 +212,7 @@ func TestMPCKMSSigner_SignTransactionWithSummary(t *testing.T) {
 	}
 
 	address := ethgo.HexToAddress("0x1234567890123456789012345678901234567890")
-	signer := NewMPCKMSSigner(client, "test-key-id", address)
+	signer := NewMPCKMSSigner(client, "test-key-id", address, big.NewInt(1))
 
 	signedTx, err := signer.SignTransactionWithSummary(tx, expectedSummary)
 	if err != nil {
@@ -233,7 +233,7 @@ func TestMPCKMSSigner_CreateTransferSummary(t *testing.T) {
 
 	address := ethgo.HexToAddress("0x1234567890123456789012345678901234567890")
 	client := &mockKMSClient{}
-	signer := NewMPCKMSSigner(client, "test-key-id", address)
+	signer := NewMPCKMSSigner(client, "test-key-id", address, big.NewInt(1))
 
 	summary := signer.CreateTransferSummary(tx, "ETH", "test transfer")
 
@@ -272,7 +272,7 @@ func TestMPCKMSSigner_CreateTransferSummary_ContractCreation(t *testing.T) {
 
 	address := ethgo.HexToAddress("0x1234567890123456789012345678901234567890")
 	client := &mockKMSClient{}
-	signer := NewMPCKMSSigner(client, "test-key-id", address)
+	signer := NewMPCKMSSigner(client, "test-key-id", address, big.NewInt(1))
 
 	summary := signer.CreateTransferSummary(tx, "", "")
 
@@ -298,7 +298,7 @@ func TestMPCKMSSigner_Sign_InvalidSignatureLength(t *testing.T) {
 	}
 
 	address := ethgo.HexToAddress("0x1234567890123456789012345678901234567890")
-	signer := NewMPCKMSSigner(client, "test-key-id", address)
+	signer := NewMPCKMSSigner(client, "test-key-id", address, big.NewInt(1))
 
 	_, err := signer.Sign([]byte("test_hash"))
 	if err == nil {
@@ -325,7 +325,7 @@ func TestMPCKMSSigner_SignTransaction_InvalidSignatureLength(t *testing.T) {
 	}
 
 	address := ethgo.HexToAddress("0x1234567890123456789012345678901234567890")
-	signer := NewMPCKMSSigner(client, "test-key-id", address)
+	signer := NewMPCKMSSigner(client, "test-key-id", address, big.NewInt(1))
 
 	_, err := signer.SignTransaction(tx)
 	if err == nil {
@@ -341,7 +341,7 @@ func TestMPCKMSSigner_Sign_KMSError(t *testing.T) {
 	}
 
 	address := ethgo.HexToAddress("0x1234567890123456789012345678901234567890")
-	signer := NewMPCKMSSigner(client, "test-key-id", address)
+	signer := NewMPCKMSSigner(client, "test-key-id", address, big.NewInt(1))
 
 	_, err := signer.Sign(make([]byte, 32))
 	if err == nil {

@@ -1,6 +1,7 @@
 package server
 
 import (
+	"math/big"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -11,6 +12,7 @@ import (
 	"github.com/mowind/web3signer-go/internal/signer"
 	"github.com/sirupsen/logrus"
 	"github.com/umbracle/ethgo"
+	ethgojsonrpc "github.com/umbracle/ethgo/jsonrpc"
 )
 
 // Builder 服务器构建器
@@ -29,11 +31,32 @@ func (b *Builder) Build() *Server {
 
 	logger := b.createLogger()
 
+	downstreamClient := downstream.NewClient(&b.cfg.Downstream)
+
+	downstreamEndpoint := b.cfg.Downstream.BuildURL()
+	rpcClient, err := ethgojsonrpc.NewClient(downstreamEndpoint)
+	if err != nil {
+		logger.WithError(err).Fatal("Failed to create downstream RPC client")
+	}
+
+	var chainIDHex string
+	err = rpcClient.Call("eth_chainId", &chainIDHex)
+	if err != nil {
+		logger.WithError(err).Fatal("Failed to get chainId from downstream")
+	}
+
+	chainID := new(big.Int)
+	if len(chainIDHex) >= 2 && chainIDHex[0:2] == "0x" {
+		chainID.SetString(chainIDHex[2:], 16)
+	} else {
+		chainID.SetString(chainIDHex, 0)
+	}
+
+	logger.WithField("chainId", chainID).Info("Retrieved chainId from downstream")
+
 	kmsClient := kms.NewClient(&b.cfg.KMS)
 	kmsAddress := ethgo.HexToAddress(b.cfg.KMS.Address)
-	mpcSigner := signer.NewMPCKMSSigner(kmsClient, b.cfg.KMS.KeyID, kmsAddress)
-
-	downstreamClient := downstream.NewClient(&b.cfg.Downstream)
+	mpcSigner := signer.NewMPCKMSSigner(kmsClient, b.cfg.KMS.KeyID, kmsAddress, chainID)
 
 	routerFactory := router.NewRouterFactory(logger)
 	jsonRPCRouter := routerFactory.CreateRouter(mpcSigner, downstreamClient)

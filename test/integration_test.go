@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math/big"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
@@ -43,7 +44,7 @@ func TestEndToEnd_CompleteIntegration(t *testing.T) {
 
 	// 创建 MPC-KMS 签名器
 	testAddress := ethgo.HexToAddress("0x1234567890123456789012345678901234567890")
-	mpcSigner := signer.NewMPCKMSSigner(kmsClient, "test-key-id", testAddress)
+	mpcSigner := signer.NewMPCKMSSigner(kmsClient, "test-key-id", testAddress, big.NewInt(1))
 
 	// 创建路由器工厂和路由器
 	routerFactory := router.NewRouterFactory(logger)
@@ -203,7 +204,7 @@ func TestEndToEnd_BatchRequests(t *testing.T) {
 
 	// 创建 MPC-KMS 签名器
 	testAddress := ethgo.HexToAddress("0x1234567890123456789012345678901234567890")
-	mpcSigner := signer.NewMPCKMSSigner(kmsClient, "test-key-id", testAddress)
+	mpcSigner := signer.NewMPCKMSSigner(kmsClient, "test-key-id", testAddress, big.NewInt(1))
 
 	// 创建路由器工厂和路由器
 	routerFactory := router.NewRouterFactory(logger)
@@ -309,7 +310,7 @@ func TestEndToEnd_ErrorHandling(t *testing.T) {
 		downstreamClient := NewMockDownstreamClient(downstreamServer)
 
 		testAddress := ethgo.HexToAddress("0x1234567890123456789012345678901234567890")
-		mpcSigner := signer.NewMPCKMSSigner(kmsClient, "test-key-id", testAddress)
+		mpcSigner := signer.NewMPCKMSSigner(kmsClient, "test-key-id", testAddress, big.NewInt(1))
 
 		routerFactory := router.NewRouterFactory(logger)
 		router := routerFactory.CreateRouter(mpcSigner, downstreamClient)
@@ -345,7 +346,7 @@ func TestEndToEnd_ErrorHandling(t *testing.T) {
 		downstreamClient := NewMockDownstreamClient(downstreamServer)
 
 		testAddress := ethgo.HexToAddress("0x1234567890123456789012345678901234567890")
-		mpcSigner := signer.NewMPCKMSSigner(kmsClient, "invalid-key-id", testAddress)
+		mpcSigner := signer.NewMPCKMSSigner(kmsClient, "invalid-key-id", testAddress, big.NewInt(1))
 
 		routerFactory := router.NewRouterFactory(logger)
 		router := routerFactory.CreateRouter(mpcSigner, downstreamClient)
@@ -384,7 +385,7 @@ func TestEndToEnd_ErrorHandling(t *testing.T) {
 		downstreamClient := NewMockDownstreamClient(downstreamServer)
 
 		testAddress := ethgo.HexToAddress("0x1234567890123456789012345678901234567890")
-		mpcSigner := signer.NewMPCKMSSigner(kmsClient, "test-key-id", testAddress)
+		mpcSigner := signer.NewMPCKMSSigner(kmsClient, "test-key-id", testAddress, big.NewInt(1))
 
 		routerFactory := router.NewRouterFactory(logger)
 		router := routerFactory.CreateRouter(mpcSigner, downstreamClient)
@@ -429,7 +430,7 @@ func TestEndToEnd_ConcurrentRequests(t *testing.T) {
 
 	// 创建 MPC-KMS 签名器
 	testAddress := ethgo.HexToAddress("0x1234567890123456789012345678901234567890")
-	mpcSigner := signer.NewMPCKMSSigner(kmsClient, "test-key-id", testAddress)
+	mpcSigner := signer.NewMPCKMSSigner(kmsClient, "test-key-id", testAddress, big.NewInt(1))
 
 	// 创建路由器工厂和路由器
 	routerFactory := router.NewRouterFactory(logger)

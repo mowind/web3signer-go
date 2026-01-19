@@ -5,35 +5,43 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"math/big"
 	"strings"
 
 	"github.com/mowind/web3signer-go/internal/downstream"
-	"github.com/mowind/web3signer-go/internal/jsonrpc"
+	internaljsonrpc "github.com/mowind/web3signer-go/internal/jsonrpc"
 	"github.com/mowind/web3signer-go/internal/signer"
 	"github.com/sirupsen/logrus"
+	ethgojsonrpc "github.com/umbracle/ethgo/jsonrpc"
 )
 
 // SignHandler 处理签名相关的 JSON-RPC 方法
 type SignHandler struct {
 	*BaseHandler
-	signer  *signer.MPCKMSSigner
-	builder *signer.TransactionBuilder
-	client  downstream.ClientInterface
+	signer        *signer.MPCKMSSigner
+	builder       *signer.TransactionBuilder
+	client        downstream.ClientInterface
+	downstreamRPC *ethgojsonrpc.Client
 }
 
 // NewSignHandler 创建签名处理器
-func NewSignHandler(mpcSigner *signer.MPCKMSSigner, client downstream.ClientInterface, logger *logrus.Logger) *SignHandler {
-	return &SignHandler{
-		BaseHandler: NewBaseHandler("sign", logger),
-		signer:      mpcSigner,
-		builder:     signer.NewTransactionBuilder(),
-		client:      client,
+func NewSignHandler(mpcSigner *signer.MPCKMSSigner, client downstream.ClientInterface, downstreamEndpoint string, logger *logrus.Logger) (*SignHandler, error) {
+	rpcClient, err := ethgojsonrpc.NewClient(downstreamEndpoint)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create downstream RPC client: %v", err)
 	}
+
+	return &SignHandler{
+		BaseHandler:   NewBaseHandler("sign", logger),
+		signer:        mpcSigner,
+		builder:       signer.NewTransactionBuilder(),
+		client:        client,
+		downstreamRPC: rpcClient,
+	}, nil
 }
 
 // handleEthAccounts 处理 eth_accounts 方法
-func (h *SignHandler) handleEthAccounts(ctx context.Context, request *jsonrpc.Request) (*jsonrpc.Response, error) {
-	// 返回KMS管理的地址
+func (h *SignHandler) handleEthAccounts(ctx context.Context, request *internaljsonrpc.Request) (*internaljsonrpc.Response, error) {
 	kmsAddress := h.signer.Address().String()
 
 	h.logger.WithField("address", kmsAddress).Debug("Returning KMS managed address for eth_accounts")
@@ -43,14 +51,13 @@ func (h *SignHandler) handleEthAccounts(ctx context.Context, request *jsonrpc.Re
 
 // Method 返回处理器支持的方法名
 func (h *SignHandler) Method() string {
-	return "sign_handler" // 这个处理器处理多个方法
+	return "sign_handler"
 }
 
 // Handle 处理 JSON-RPC 请求
-func (h *SignHandler) Handle(ctx context.Context, request *jsonrpc.Request) (*jsonrpc.Response, error) {
+func (h *SignHandler) Handle(ctx context.Context, request *internaljsonrpc.Request) (*internaljsonrpc.Response, error) {
 	h.LogRequest(request)
 
-	// 根据方法名分发到具体的处理函数
 	switch request.Method {
 	case "eth_accounts":
 		return h.handleEthAccounts(ctx, request)
@@ -61,22 +68,19 @@ func (h *SignHandler) Handle(ctx context.Context, request *jsonrpc.Request) (*js
 	case "eth_sendTransaction":
 		return h.handleEthSendTransaction(ctx, request)
 	default:
-		// 不支持的签名方法
-		return h.CreateErrorResponse(request.ID, jsonrpc.CodeMethodNotFound,
+		return h.CreateErrorResponse(request.ID, internaljsonrpc.CodeMethodNotFound,
 			"Method not supported by sign handler", nil), nil
 	}
 }
 
 // handleEthSign 处理 eth_sign 方法
-func (h *SignHandler) handleEthSign(ctx context.Context, request *jsonrpc.Request) (*jsonrpc.Response, error) {
-	// 解析参数
+func (h *SignHandler) handleEthSign(ctx context.Context, request *internaljsonrpc.Request) (*internaljsonrpc.Response, error) {
 	address, data, err := signer.ParseSignParams(request.Params)
 	if err != nil {
 		h.logger.WithError(err).Warn("Failed to parse eth_sign params")
 		return h.CreateInvalidParamsResponse(request.ID, fmt.Sprintf("Invalid parameters: %v", err)), nil
 	}
 
-	// 验证地址匹配（转换为小写比较）
 	expectedAddress := h.signer.Address().String()
 	if strings.ToLower(address) != strings.ToLower(expectedAddress) {
 		h.logger.WithFields(logrus.Fields{
@@ -88,15 +92,13 @@ func (h *SignHandler) handleEthSign(ctx context.Context, request *jsonrpc.Reques
 
 	h.logger.WithField("data_length", len(data)).Debug("Processing eth_sign request")
 
-	// 使用 MPC-KMS 进行签名
 	signatureHex, err := h.signer.Sign(data)
 	if err != nil {
 		h.logger.WithError(err).Error("Failed to sign data")
-		return h.CreateErrorResponse(request.ID, jsonrpc.CodeInternalError,
+		return h.CreateErrorResponse(request.ID, internaljsonrpc.CodeInternalError,
 			"Failed to sign data", err.Error()), nil
 	}
 
-	// 将签名转换为十六进制字符串
 	signature := hex.EncodeToString(signatureHex)
 
 	h.logger.Debug("eth_sign completed successfully")
@@ -104,8 +106,7 @@ func (h *SignHandler) handleEthSign(ctx context.Context, request *jsonrpc.Reques
 }
 
 // handleEthSignTransaction 处理 eth_signTransaction 方法
-func (h *SignHandler) handleEthSignTransaction(ctx context.Context, request *jsonrpc.Request) (*jsonrpc.Response, error) {
-	// 解析交易参数
+func (h *SignHandler) handleEthSignTransaction(ctx context.Context, request *internaljsonrpc.Request) (*internaljsonrpc.Response, error) {
 	txParams, err := signer.ParseTransactionParams(request.Params)
 	if err != nil {
 		h.logger.WithError(err).Warn("Failed to parse eth_signTransaction params")
@@ -114,7 +115,6 @@ func (h *SignHandler) handleEthSignTransaction(ctx context.Context, request *jso
 
 	h.logger.WithField("from", txParams.From).Debug("Processing eth_signTransaction request")
 
-	// 验证 from 地址匹配（转换为小写比较）
 	expectedAddress := h.signer.Address().String()
 	if strings.ToLower(txParams.From) != strings.ToLower(expectedAddress) {
 		h.logger.WithFields(logrus.Fields{
@@ -124,18 +124,16 @@ func (h *SignHandler) handleEthSignTransaction(ctx context.Context, request *jso
 		return h.CreateInvalidParamsResponse(request.ID, "From address mismatch"), nil
 	}
 
-	// 构建交易
 	tx, err := h.builder.BuildTransaction(*txParams)
 	if err != nil {
 		h.logger.WithError(err).Error("Failed to build transaction")
 		return h.CreateInvalidParamsResponse(request.ID, fmt.Sprintf("Failed to build transaction: %v", err)), nil
 	}
 
-	// 对交易进行签名
 	signedTx, err := h.signer.SignTransaction(tx)
 	if err != nil {
 		h.logger.WithError(err).Error("Failed to sign transaction")
-		return h.CreateErrorResponse(request.ID, jsonrpc.CodeInternalError,
+		return h.CreateErrorResponse(request.ID, internaljsonrpc.CodeInternalError,
 			"Failed to sign transaction", err.Error()), nil
 	}
 
@@ -144,7 +142,7 @@ func (h *SignHandler) handleEthSignTransaction(ctx context.Context, request *jso
 }
 
 // handleEthSendTransaction 处理 eth_sendTransaction 方法
-func (h *SignHandler) handleEthSendTransaction(ctx context.Context, request *jsonrpc.Request) (*jsonrpc.Response, error) {
+func (h *SignHandler) handleEthSendTransaction(ctx context.Context, request *internaljsonrpc.Request) (*internaljsonrpc.Response, error) {
 	txParams, err := signer.ParseTransactionParams(request.Params)
 	if err != nil {
 		h.logger.WithError(err).Warn("Failed to parse eth_sendTransaction params")
@@ -162,16 +160,57 @@ func (h *SignHandler) handleEthSendTransaction(ctx context.Context, request *jso
 		return h.CreateInvalidParamsResponse(request.ID, "From address mismatch"), nil
 	}
 
+	var chainIDHex string
+	err = h.downstreamRPC.Call("eth_chainId", &chainIDHex)
+	if err != nil {
+		h.logger.WithError(err).Error("Failed to get chainId from downstream")
+		return h.CreateErrorResponse(request.ID, internaljsonrpc.CodeInternalError,
+			"Failed to get chainId", err.Error()), nil
+	}
+
+	chainID := new(big.Int)
+	if len(chainIDHex) >= 2 && chainIDHex[0:2] == "0x" {
+		chainID.SetString(chainIDHex[2:], 16)
+	} else {
+		chainID.SetString(chainIDHex, 0)
+	}
+
+	h.logger.WithField("chainId", chainID).Debug("Retrieved chainId from downstream")
+
+	var gasPriceHex string
+	err = h.downstreamRPC.Call("eth_gasPrice", &gasPriceHex)
+	if err != nil {
+		h.logger.WithError(err).Error("Failed to get gasPrice from downstream")
+		return h.CreateErrorResponse(request.ID, internaljsonrpc.CodeInternalError,
+			"Failed to get gasPrice", err.Error()), nil
+	}
+
+	gasPrice := new(big.Int)
+	if len(gasPriceHex) >= 2 && gasPriceHex[0:2] == "0x" {
+		gasPrice.SetString(gasPriceHex[2:], 16)
+	} else {
+		gasPrice.SetString(gasPriceHex, 0)
+	}
+
+	h.logger.WithField("gasPrice", gasPrice).Debug("Retrieved gasPrice from downstream")
+
+	txParams.ChainID = chainID.String()
+	if txParams.GasPrice == "" || txParams.GasPrice == "0" {
+		txParams.GasPrice = gasPrice.String()
+	}
+
 	tx, err := h.builder.BuildTransaction(*txParams)
 	if err != nil {
 		h.logger.WithError(err).Error("Failed to build transaction")
 		return h.CreateInvalidParamsResponse(request.ID, fmt.Sprintf("Failed to build transaction: %v", err)), nil
 	}
 
+	tx.ChainID = chainID
+
 	signedTx, err := h.signer.SignTransaction(tx)
 	if err != nil {
 		h.logger.WithError(err).Error("Failed to sign transaction")
-		return h.CreateErrorResponse(request.ID, jsonrpc.CodeInternalError,
+		return h.CreateErrorResponse(request.ID, internaljsonrpc.CodeInternalError,
 			"Failed to sign transaction", err.Error()), nil
 	}
 
@@ -179,7 +218,7 @@ func (h *SignHandler) handleEthSendTransaction(ctx context.Context, request *jso
 	rlpBytes, err = signedTx.MarshalRLPTo(rlpBytes)
 	if err != nil {
 		h.logger.WithError(err).Error("Failed to marshal transaction to RLP")
-		return h.CreateErrorResponse(request.ID, jsonrpc.CodeInternalError,
+		return h.CreateErrorResponse(request.ID, internaljsonrpc.CodeInternalError,
 			"Failed to marshal transaction", err.Error()), nil
 	}
 
@@ -188,11 +227,11 @@ func (h *SignHandler) handleEthSendTransaction(ctx context.Context, request *jso
 	paramsBytes, err := json.Marshal([]interface{}{rawTxHex})
 	if err != nil {
 		h.logger.WithError(err).Error("Failed to marshal eth_sendRawTransaction params")
-		return h.CreateErrorResponse(request.ID, jsonrpc.CodeInternalError,
+		return h.CreateErrorResponse(request.ID, internaljsonrpc.CodeInternalError,
 			"Failed to create forward request", err.Error()), nil
 	}
 
-	forwardRequest := &jsonrpc.Request{
+	forwardRequest := &internaljsonrpc.Request{
 		JSONRPC: "2.0",
 		Method:  "eth_sendRawTransaction",
 		Params:  paramsBytes,
@@ -202,7 +241,7 @@ func (h *SignHandler) handleEthSendTransaction(ctx context.Context, request *jso
 	forwardResponse, err := h.client.ForwardRequest(ctx, forwardRequest)
 	if err != nil {
 		h.logger.WithError(err).Error("Failed to forward eth_sendRawTransaction to downstream")
-		return h.CreateErrorResponse(request.ID, jsonrpc.CodeInternalError,
+		return h.CreateErrorResponse(request.ID, internaljsonrpc.CodeInternalError,
 			"Failed to forward transaction", err.Error()), nil
 	}
 
@@ -214,7 +253,7 @@ func (h *SignHandler) handleEthSendTransaction(ctx context.Context, request *jso
 
 	h.logger.Debug("eth_sendTransaction completed successfully")
 	forwardResponse.ID = request.ID
-	forwardResponse.JSONRPC = jsonrpc.JSONRPCVersion
+	forwardResponse.JSONRPC = internaljsonrpc.JSONRPCVersion
 	return forwardResponse, nil
 }
 

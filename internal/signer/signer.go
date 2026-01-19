@@ -4,9 +4,11 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
+	"math/big"
 
 	"github.com/mowind/web3signer-go/internal/kms"
 	"github.com/umbracle/ethgo"
+	"github.com/umbracle/fastrlp"
 )
 
 // MPCKMSSigner 实现 ethgo.Key 接口，使用 MPC-KMS 进行签名
@@ -14,14 +16,16 @@ type MPCKMSSigner struct {
 	client  kms.ClientInterface
 	keyID   string
 	address ethgo.Address
+	chainID *big.Int
 }
 
 // NewMPCKMSSigner 创建新的 MPC-KMS 签名器
-func NewMPCKMSSigner(client kms.ClientInterface, keyID string, address ethgo.Address) *MPCKMSSigner {
+func NewMPCKMSSigner(client kms.ClientInterface, keyID string, address ethgo.Address, chainID *big.Int) *MPCKMSSigner {
 	return &MPCKMSSigner{
 		client:  client,
 		keyID:   keyID,
 		address: address,
+		chainID: chainID,
 	}
 }
 
@@ -53,91 +57,112 @@ func (s *MPCKMSSigner) Sign(hash []byte) ([]byte, error) {
 
 // SignTransaction 对交易进行签名
 func (s *MPCKMSSigner) SignTransaction(tx *ethgo.Transaction) (*ethgo.Transaction, error) {
-	// 创建交易的副本以避免修改原始交易
 	txCopy := tx.Copy()
-
-	// 设置 From 字段为签名器的地址
 	txCopy.From = s.address
 
-	// 计算交易哈希
-	hash, err := txCopy.GetHash()
-	if err != nil {
-		return nil, fmt.Errorf("failed to get transaction hash: %v", err)
-	}
+	hash := s.signHash(txCopy)
 
-	// 使用 MPC-KMS 对交易哈希进行签名
-	signature, err := s.Sign(hash[:])
+	signature, err := s.Sign(hash)
 	if err != nil {
 		return nil, fmt.Errorf("failed to sign transaction: %v", err)
 	}
 
-	// 解析签名 R, S, V 值
 	if len(signature) != 65 {
 		return nil, fmt.Errorf("invalid signature length: expected 65, got %d", len(signature))
 	}
 
-	// 设置交易签名
-	txCopy.R = signature[0:32]
-	txCopy.S = signature[32:64]
-	txCopy.V = signature[64:65]
+	txCopy.R = s.trimBytesZeros(signature[0:32])
+	txCopy.S = s.trimBytesZeros(signature[32:64])
 
-	// 根据交易类型调整 V 值
-	if err := s.adjustVValue(txCopy); err != nil {
-		return nil, fmt.Errorf("failed to adjust V value: %v", err)
+	vv := uint64(signature[64])
+	chainID := uint64(0)
+	if s.chainID != nil {
+		chainID = s.chainID.Uint64()
 	}
+
+	if txCopy.Type == ethgo.TransactionLegacy {
+		vv = vv + 35 + chainID*2
+	}
+
+	txCopy.V = new(big.Int).SetUint64(vv).Bytes()
 
 	return txCopy, nil
 }
 
-// adjustVValue 根据交易类型调整 V 值
-func (s *MPCKMSSigner) adjustVValue(tx *ethgo.Transaction) error {
-	if len(tx.V) != 1 {
-		return fmt.Errorf("invalid V value length: expected 1, got %d", len(tx.V))
+// signHash 计算交易的签名哈希
+func (s *MPCKMSSigner) signHash(tx *ethgo.Transaction) []byte {
+	a := fastrlp.DefaultArenaPool.Get()
+	defer fastrlp.DefaultArenaPool.Put(a)
+
+	v := a.NewArray()
+
+	if tx.Type != ethgo.TransactionLegacy {
+		v.Set(a.NewBigInt(s.chainID))
 	}
 
-	v := tx.V[0]
+	v.Set(a.NewUint(tx.Nonce))
 
-	// 根据交易类型调整 V 值
-	switch tx.Type {
-	case ethgo.TransactionLegacy:
-		// Legacy 交易：V = 27 + recID 或 28 + recID
-		if v < 27 {
-			tx.V[0] = v + 27
+	if tx.Type == ethgo.TransactionDynamicFee {
+		v.Set(a.NewBigInt(tx.MaxPriorityFeePerGas))
+		v.Set(a.NewBigInt(tx.MaxFeePerGas))
+	} else {
+		v.Set(a.NewUint(tx.GasPrice))
+	}
+
+	v.Set(a.NewUint(tx.Gas))
+	if tx.To == nil {
+		v.Set(a.NewNull())
+	} else {
+		v.Set(a.NewCopyBytes((*tx.To)[:]))
+	}
+	v.Set(a.NewBigInt(tx.Value))
+	v.Set(a.NewCopyBytes(tx.Input))
+
+	if tx.Type != ethgo.TransactionLegacy {
+		accessList, err := tx.AccessList.MarshalRLPWith(a)
+		if err != nil {
+			panic(err)
 		}
-
-	case ethgo.TransactionAccessList:
-		// EIP-2930 交易：V = recID
-		// 不需要调整
-
-	case ethgo.TransactionDynamicFee:
-		// EIP-1559 交易：V = recID
-		// 不需要调整
-
-	default:
-		return fmt.Errorf("unsupported transaction type: %v", tx.Type)
+		v.Set(accessList)
 	}
 
-	return nil
+	if s.chainID != nil && s.chainID.Uint64() != 0 && tx.Type == ethgo.TransactionLegacy {
+		v.Set(a.NewUint(s.chainID.Uint64()))
+		v.Set(a.NewUint(0))
+		v.Set(a.NewUint(0))
+	}
+
+	dst := v.MarshalTo(nil)
+
+	if tx.Type != ethgo.TransactionLegacy {
+		dst = append([]byte{byte(tx.Type)}, dst...)
+	}
+
+	return ethgo.Keccak256(dst)
+}
+
+// trimBytesZeros 移除字节切片的前导零
+func (s *MPCKMSSigner) trimBytesZeros(b []byte) []byte {
+	var i int
+	for i = 0; i < len(b); i++ {
+		if b[i] != 0x0 {
+			break
+		}
+	}
+	if i == len(b) {
+		return []byte{0}
+	}
+	return b[i:]
 }
 
 // SignTransactionWithSummary 对交易进行签名，并包含交易摘要信息
 func (s *MPCKMSSigner) SignTransactionWithSummary(tx *ethgo.Transaction, summary *kms.SignSummary) (*ethgo.Transaction, error) {
-	// 创建交易的副本
 	txCopy := tx.Copy()
-
-	// 设置 From 字段
 	txCopy.From = s.address
 
-	// 计算交易哈希
-	hash, err := txCopy.GetHash()
-	if err != nil {
-		return nil, fmt.Errorf("failed to get transaction hash: %v", err)
-	}
+	hash := s.signHash(txCopy)
+	hashHex := hex.EncodeToString(hash)
 
-	// 将哈希转换为十六进制
-	hashHex := hex.EncodeToString(hash[:])
-
-	// 使用 MPC-KMS 进行签名，包含摘要信息
 	signatureHex, err := s.client.SignWithOptions(
 		context.Background(),
 		s.keyID,
@@ -150,7 +175,6 @@ func (s *MPCKMSSigner) SignTransactionWithSummary(tx *ethgo.Transaction, summary
 		return nil, fmt.Errorf("failed to sign transaction with summary: %v", err)
 	}
 
-	// 解析签名
 	signature, err := hex.DecodeString(string(signatureHex))
 	if err != nil {
 		return nil, fmt.Errorf("failed to decode signature: %v", err)
@@ -160,15 +184,20 @@ func (s *MPCKMSSigner) SignTransactionWithSummary(tx *ethgo.Transaction, summary
 		return nil, fmt.Errorf("invalid signature length: expected 65, got %d", len(signature))
 	}
 
-	// 设置交易签名
-	txCopy.R = signature[0:32]
-	txCopy.S = signature[32:64]
-	txCopy.V = signature[64:65]
+	txCopy.R = s.trimBytesZeros(signature[0:32])
+	txCopy.S = s.trimBytesZeros(signature[32:64])
 
-	// 调整 V 值
-	if err := s.adjustVValue(txCopy); err != nil {
-		return nil, fmt.Errorf("failed to adjust V value: %v", err)
+	vv := uint64(signature[64])
+	chainID := uint64(0)
+	if s.chainID != nil {
+		chainID = s.chainID.Uint64()
 	}
+
+	if txCopy.Type == ethgo.TransactionLegacy {
+		vv = vv + 35 + chainID*2
+	}
+
+	txCopy.V = new(big.Int).SetUint64(vv).Bytes()
 
 	return txCopy, nil
 }
@@ -181,7 +210,7 @@ func (s *MPCKMSSigner) CreateTransferSummary(tx *ethgo.Transaction, token string
 	if tx.To != nil {
 		to = tx.To.String()
 	} else {
-		to = "" // 合约创建
+		to = ""
 	}
 
 	amount := "0"

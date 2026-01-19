@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/hex"
 	"encoding/json"
+	"math/big"
 	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 
@@ -46,10 +48,11 @@ func (c *testKMSClient) Do(req *http.Request) (*http.Response, error) {
 }
 
 // mockDownstreamClient 用于测试的 mock 下游客户端
-type testDownstreamClient struct{}
+type testDownstreamClient struct {
+	mockServer *httptest.Server
+}
 
 func (c *testDownstreamClient) ForwardRequest(ctx context.Context, req *jsonrpc.Request) (*jsonrpc.Response, error) {
-	// 模拟下游服务响应
 	if req.Method == "eth_sendRawTransaction" {
 		return jsonrpc.NewResponse(req.ID, "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef")
 	}
@@ -70,26 +73,65 @@ func (c *testDownstreamClient) TestConnection(ctx context.Context) error {
 }
 
 func (c *testDownstreamClient) GetEndpoint() string {
+	if c.mockServer != nil {
+		return c.mockServer.URL
+	}
 	return "http://test-downstream:8545"
 }
 
 func (c *testDownstreamClient) Close() error {
+	if c.mockServer != nil {
+		c.mockServer.Close()
+	}
 	return nil
 }
 
+func newMockDownstreamClient() *testDownstreamClient {
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var reqBody map[string]interface{}
+		json.NewDecoder(r.Body).Decode(&reqBody)
+		method, _ := reqBody["method"].(string)
+
+		var response interface{}
+		switch method {
+		case "eth_chainId":
+			response = map[string]interface{}{
+				"jsonrpc": "2.0",
+				"id":      reqBody["id"],
+				"result":  "0x1",
+			}
+		case "eth_gasPrice":
+			response = map[string]interface{}{
+				"jsonrpc": "2.0",
+				"id":      reqBody["id"],
+				"result":  "0x4a817c800",
+			}
+		default:
+			response = map[string]interface{}{
+				"jsonrpc": "2.0",
+				"id":      reqBody["id"],
+				"result":  "downstream_result",
+			}
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(response)
+	})
+
+	server := httptest.NewServer(handler)
+	return &testDownstreamClient{mockServer: server}
+}
+
 func TestIntegration_CompleteFlow(t *testing.T) {
-	// 设置 logger
 	logger := logrus.New()
 	logger.SetLevel(logrus.DebugLevel)
 
-	// 创建 MPC-KMS 签名器
 	testAddress := ethgo.HexToAddress("0x1234567890123456789012345678901234567890")
-	mpcSigner := signer.NewMPCKMSSigner(&testKMSClient{}, "test-key-id", testAddress)
+	mpcSigner := signer.NewMPCKMSSigner(&testKMSClient{}, "test-key-id", testAddress, big.NewInt(1))
 
-	// 创建下游客户端
-	downstreamClient := &testDownstreamClient{}
+	downstreamClient := newMockDownstreamClient()
+	defer downstreamClient.Close()
 
-	// 创建路由器工厂
 	factory := NewRouterFactory(logger)
 	router := factory.CreateRouter(mpcSigner, downstreamClient)
 
@@ -225,18 +267,15 @@ func TestIntegration_CompleteFlow(t *testing.T) {
 }
 
 func TestIntegration_BatchRequests(t *testing.T) {
-	// 设置 logger
 	logger := logrus.New()
 	logger.SetLevel(logrus.DebugLevel)
 
-	// 创建 MPC-KMS 签名器
 	testAddress := ethgo.HexToAddress("0x1234567890123456789012345678901234567890")
-	mpcSigner := signer.NewMPCKMSSigner(&testKMSClient{}, "test-key-id", testAddress)
+	mpcSigner := signer.NewMPCKMSSigner(&testKMSClient{}, "test-key-id", testAddress, big.NewInt(1))
 
-	// 创建下游客户端
-	downstreamClient := &testDownstreamClient{}
+	downstreamClient := newMockDownstreamClient()
+	defer downstreamClient.Close()
 
-	// 创建路由器
 	factory := NewRouterFactory(logger)
 	router := factory.CreateRouter(mpcSigner, downstreamClient)
 

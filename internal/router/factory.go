@@ -26,7 +26,10 @@ func (f *RouterFactory) CreateRouter(mpcSigner *signer.MPCKMSSigner, downstreamC
 	router := NewRouter(f.logger)
 
 	// 注册签名处理器
-	signHandler := NewSignHandler(mpcSigner, downstreamClient, f.logger)
+	signHandler, err := NewSignHandler(mpcSigner, downstreamClient, downstreamClient.GetEndpoint(), f.logger)
+	if err != nil {
+		f.logger.WithError(err).Fatal("Failed to create sign handler")
+	}
 
 	// 注意：SignHandler 处理多个方法，所以我们需要为每个方法注册同一个处理器
 	// 在实际实现中，我们可能需要一个更智能的路由机制
