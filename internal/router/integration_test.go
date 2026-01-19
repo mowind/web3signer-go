@@ -106,6 +106,24 @@ func newMockDownstreamClient() *testDownstreamClient {
 				"id":      reqBody["id"],
 				"result":  "0x4a817c800",
 			}
+		case "eth_getTransactionCount":
+			response = map[string]interface{}{
+				"jsonrpc": "2.0",
+				"id":      reqBody["id"],
+				"result":  "0x5", // 返回 nonce 5
+			}
+		case "eth_estimateGas":
+			response = map[string]interface{}{
+				"jsonrpc": "2.0",
+				"id":      reqBody["id"],
+				"result":  "0x5208", // 21000 gas
+			}
+		case "eth_sendRawTransaction":
+			response = map[string]interface{}{
+				"jsonrpc": "2.0",
+				"id":      reqBody["id"],
+				"result":  "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
+			}
 		default:
 			response = map[string]interface{}{
 				"jsonrpc": "2.0",

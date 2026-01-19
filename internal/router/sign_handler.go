@@ -12,6 +12,7 @@ import (
 	internaljsonrpc "github.com/mowind/web3signer-go/internal/jsonrpc"
 	"github.com/mowind/web3signer-go/internal/signer"
 	"github.com/sirupsen/logrus"
+	"github.com/umbracle/ethgo"
 	ethgojsonrpc "github.com/umbracle/ethgo/jsonrpc"
 )
 
@@ -160,6 +161,21 @@ func (h *SignHandler) handleEthSendTransaction(ctx context.Context, request *int
 		return h.CreateInvalidParamsResponse(request.ID, "From address mismatch"), nil
 	}
 
+	// 获取账户 nonce
+	nonce, err := h.downstreamRPC.Eth().GetNonce(h.signer.Address(), ethgo.Latest)
+	if err != nil {
+		h.logger.WithError(err).Error("Failed to get nonce from downstream")
+		return h.CreateErrorResponse(request.ID, internaljsonrpc.CodeInternalError,
+			"Failed to get nonce", err.Error()), nil
+	}
+
+	h.logger.WithField("nonce", nonce).Debug("Retrieved nonce from downstream")
+
+	// 如果客户端没有提供 nonce，使用获取到的 nonce
+	if txParams.Nonce == "" {
+		txParams.Nonce = fmt.Sprintf("0x%x", nonce)
+	}
+
 	gasPrice, err := h.downstreamRPC.Eth().GasPrice()
 	if err != nil {
 		h.logger.WithError(err).Error("Failed to get gasPrice from downstream")
@@ -171,6 +187,46 @@ func (h *SignHandler) handleEthSendTransaction(ctx context.Context, request *int
 
 	if txParams.GasPrice == "" || txParams.GasPrice == "0" {
 		txParams.GasPrice = new(big.Int).SetUint64(gasPrice).String()
+	}
+
+	// 如果客户端没有提供 gas 或 gas 为 0，进行 gas 估算
+	if txParams.Gas == "" || txParams.Gas == "0" {
+		// 构建 CallMsg 用于 gas 估算
+		callMsg := &ethgo.CallMsg{
+			From:  h.signer.Address(),
+			Value: new(big.Int),
+		}
+
+		if txParams.To != "" {
+			to := ethgo.HexToAddress(txParams.To)
+			callMsg.To = &to
+		}
+
+		if txParams.Value != "" {
+			value := new(big.Int)
+			if _, ok := value.SetString(txParams.Value, 0); ok {
+				callMsg.Value = value
+			}
+		}
+
+		if txParams.Data != "" {
+			data, err := hexToBytes(txParams.Data)
+			if err == nil {
+				callMsg.Data = data
+			}
+		}
+
+		estimatedGas, err := h.downstreamRPC.Eth().EstimateGas(callMsg)
+		if err != nil {
+			h.logger.WithError(err).Warn("Failed to estimate gas, using default")
+			// 使用默认 gas 限制
+			txParams.Gas = "0x5208" // 21000 gas for simple transfer
+		} else {
+			// 增加 20% 作为安全边界
+			estimatedGas = estimatedGas * 120 / 100
+			txParams.Gas = fmt.Sprintf("0x%x", estimatedGas)
+			h.logger.WithField("estimatedGas", estimatedGas).Debug("Estimated gas for transaction")
+		}
 	}
 
 	tx, err := h.builder.BuildTransaction(*txParams)
@@ -227,6 +283,25 @@ func (h *SignHandler) handleEthSendTransaction(ctx context.Context, request *int
 	forwardResponse.ID = request.ID
 	forwardResponse.JSONRPC = internaljsonrpc.JSONRPCVersion
 	return forwardResponse, nil
+}
+
+// hexToBytes 将十六进制字符串转换为字节切片
+func hexToBytes(s string) ([]byte, error) {
+	if s == "" {
+		return nil, nil
+	}
+
+	// 移除 0x 前缀
+	if len(s) >= 2 && s[0:2] == "0x" {
+		s = s[2:]
+	}
+
+	// 如果长度为奇数，在前面补 0
+	if len(s)%2 != 0 {
+		s = "0" + s
+	}
+
+	return hex.DecodeString(s)
 }
 
 // IsSignMethod 检查是否为签名方法

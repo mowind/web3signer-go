@@ -95,14 +95,15 @@ func (tb *TransactionBuilder) buildLegacyTransaction(params TransactionParams, g
 		gasPrice = price
 	}
 
-	to := ethgo.HexToAddress("")
+	var to *ethgo.Address
 	if params.To != "" {
-		to = ethgo.HexToAddress(params.To)
+		addr := ethgo.HexToAddress(params.To)
+		to = &addr
 	}
 
 	return &ethgo.Transaction{
 		From:     ethgo.Address{}, // 将由签名器填充
-		To:       &to,
+		To:       to,
 		Nonce:    nonce,
 		GasPrice: gasPrice,
 		Gas:      gas,
@@ -129,16 +130,17 @@ func (tb *TransactionBuilder) buildEIP2930Transaction(params TransactionParams, 
 		}
 	}
 
-	to := ethgo.HexToAddress("")
+	var to *ethgo.Address
 	if params.To != "" {
-		to = ethgo.HexToAddress(params.To)
+		addr := ethgo.HexToAddress(params.To)
+		to = &addr
 	}
 
 	accessList := tb.convertAccessList(params.AccessList)
 
 	return &ethgo.Transaction{
 		From:       ethgo.Address{}, // 将由签名器填充
-		To:         &to,
+		To:         to,
 		Nonce:      nonce,
 		GasPrice:   gasPrice,
 		Gas:        gas,
@@ -172,16 +174,17 @@ func (tb *TransactionBuilder) buildEIP1559Transaction(params TransactionParams, 
 		}
 	}
 
-	to := ethgo.HexToAddress("")
+	var to *ethgo.Address
 	if params.To != "" {
-		to = ethgo.HexToAddress(params.To)
+		addr := ethgo.HexToAddress(params.To)
+		to = &addr
 	}
 
 	accessList := tb.convertAccessList(params.AccessList)
 
 	return &ethgo.Transaction{
 		From:                 ethgo.Address{}, // 将由签名器填充
-		To:                   &to,
+		To:                   to,
 		Nonce:                nonce,
 		Gas:                  gas,
 		Value:                value,

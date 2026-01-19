@@ -174,11 +174,9 @@ func TestTransactionBuilder_ContractCreation(t *testing.T) {
 		t.Fatalf("Failed to build contract creation transaction: %v", err)
 	}
 
-	// 对于合约创建，To 应该是零地址
-	if tx.To == nil {
-		t.Error("Expected To address for contract creation (should be zero address)")
-	} else if *tx.To != ethgo.ZeroAddress {
-		t.Errorf("Expected zero address for contract creation, got %s", tx.To.String())
+	// 对于合约创建，To 应该是 nil（表示合约创建）
+	if tx.To != nil {
+		t.Errorf("Expected nil To address for contract creation, got %s", tx.To.String())
 	}
 }
 
