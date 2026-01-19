@@ -7,6 +7,7 @@ import (
 	"math/big"
 
 	"github.com/mowind/web3signer-go/internal/kms"
+	"github.com/sirupsen/logrus"
 	"github.com/umbracle/ethgo"
 	"github.com/umbracle/fastrlp"
 )
@@ -71,8 +72,10 @@ func (s *MPCKMSSigner) SignTransaction(tx *ethgo.Transaction) (*ethgo.Transactio
 		return nil, fmt.Errorf("invalid signature length: expected 65, got %d", len(signature))
 	}
 
-	txCopy.R = s.trimBytesZeros(signature[0:32])
-	txCopy.S = s.trimBytesZeros(signature[32:64])
+	rTrimmed := s.trimBytesZeros(signature[0:32])
+	sTrimmed := s.trimBytesZeros(signature[32:64])
+	txCopy.R = rTrimmed
+	txCopy.S = sTrimmed
 
 	vv := uint64(signature[64])
 	chainID := uint64(0)
@@ -84,7 +87,25 @@ func (s *MPCKMSSigner) SignTransaction(tx *ethgo.Transaction) (*ethgo.Transactio
 		vv = vv + 35 + chainID*2
 	}
 
-	txCopy.V = new(big.Int).SetUint64(vv).Bytes()
+	vBytes := new(big.Int).SetUint64(vv).Bytes()
+	txCopy.V = vBytes
+
+	logrus.WithFields(logrus.Fields{
+		"tx_type":         txCopy.Type,
+		"nonce":           txCopy.Nonce,
+		"to":              txCopy.To,
+		"value":           txCopy.Value,
+		"gas":             txCopy.Gas,
+		"gasPrice":        txCopy.GasPrice,
+		"maxFeePerGas":    txCopy.MaxFeePerGas,
+		"maxPriorityFee":  txCopy.MaxPriorityFeePerGas,
+		"chainID":         txCopy.ChainID,
+		"signature_R":     hex.EncodeToString(txCopy.R),
+		"signature_S":     hex.EncodeToString(txCopy.S),
+		"signature_V":     hex.EncodeToString(txCopy.V),
+		"signature_V_len": len(txCopy.V),
+		"from":            txCopy.From,
+	}).Debug("Signed transaction before RLP marshaling")
 
 	return txCopy, nil
 }
