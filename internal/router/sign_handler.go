@@ -160,43 +160,27 @@ func (h *SignHandler) handleEthSendTransaction(ctx context.Context, request *int
 		return h.CreateInvalidParamsResponse(request.ID, "From address mismatch"), nil
 	}
 
-	var chainIDHex string
-	err = h.downstreamRPC.Call("eth_chainId", &chainIDHex)
+	chainID, err := h.downstreamRPC.Eth().ChainID()
 	if err != nil {
 		h.logger.WithError(err).Error("Failed to get chainId from downstream")
 		return h.CreateErrorResponse(request.ID, internaljsonrpc.CodeInternalError,
 			"Failed to get chainId", err.Error()), nil
 	}
 
-	chainID := new(big.Int)
-	if len(chainIDHex) >= 2 && chainIDHex[0:2] == "0x" {
-		chainID.SetString(chainIDHex[2:], 16)
-	} else {
-		chainID.SetString(chainIDHex, 0)
-	}
-
 	h.logger.WithField("chainId", chainID).Debug("Retrieved chainId from downstream")
 
-	var gasPriceHex string
-	err = h.downstreamRPC.Call("eth_gasPrice", &gasPriceHex)
+	gasPrice, err := h.downstreamRPC.Eth().GasPrice()
 	if err != nil {
 		h.logger.WithError(err).Error("Failed to get gasPrice from downstream")
 		return h.CreateErrorResponse(request.ID, internaljsonrpc.CodeInternalError,
 			"Failed to get gasPrice", err.Error()), nil
 	}
 
-	gasPrice := new(big.Int)
-	if len(gasPriceHex) >= 2 && gasPriceHex[0:2] == "0x" {
-		gasPrice.SetString(gasPriceHex[2:], 16)
-	} else {
-		gasPrice.SetString(gasPriceHex, 0)
-	}
-
 	h.logger.WithField("gasPrice", gasPrice).Debug("Retrieved gasPrice from downstream")
 
 	txParams.ChainID = chainID.String()
 	if txParams.GasPrice == "" || txParams.GasPrice == "0" {
-		txParams.GasPrice = gasPrice.String()
+		txParams.GasPrice = new(big.Int).SetUint64(gasPrice).String()
 	}
 
 	tx, err := h.builder.BuildTransaction(*txParams)
