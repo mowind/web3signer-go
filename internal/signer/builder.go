@@ -71,13 +71,14 @@ func (tb *TransactionBuilder) BuildTransaction(params TransactionParams) (*ethgo
 	}
 
 	// 根据参数确定交易类型
-	if params.MaxFeePerGas != "" || params.MaxPriorityFeePerGas != "" {
+	switch {
+	case params.MaxFeePerGas != "" || params.MaxPriorityFeePerGas != "":
 		// EIP-1559 交易
 		return tb.buildEIP1559Transaction(params, gas, value, nonce, data)
-	} else if len(params.AccessList) > 0 {
+	case len(params.AccessList) > 0:
 		// EIP-2930 交易
 		return tb.buildEIP2930Transaction(params, gas, value, nonce, data)
-	} else {
+	default:
 		// Legacy 交易
 		return tb.buildLegacyTransaction(params, gas, value, nonce, data)
 	}

@@ -102,14 +102,15 @@ func (h *BaseHandler) LogResponse(request *jsonrpc.Request, response *jsonrpc.Re
 		"id":     request.ID,
 	}
 
-	if err != nil {
+	switch {
+	case err != nil:
 		fields["error"] = err.Error()
 		h.logger.WithFields(fields).Error("Request processing failed")
-	} else if response.Error != nil {
+	case response.Error != nil:
 		fields["error_code"] = response.Error.Code
 		fields["error_message"] = response.Error.Message
 		h.logger.WithFields(fields).Warn("Request returned error")
-	} else {
+	default:
 		h.logger.WithFields(fields).Debug("Request processed successfully")
 	}
 }

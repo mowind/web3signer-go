@@ -519,7 +519,7 @@ func createTestHandler(router *router.Router, logger *logrus.Logger) http.Handle
 			errResp := jsonrpc.NewErrorResponse(nil, jsonrpc.ParseError)
 			respData, _ := json.Marshal(errResp)
 			w.Header().Set("Content-Type", "application/json")
-			w.Write(respData)
+			_, _ = w.Write(respData)
 			return
 		}
 
@@ -539,7 +539,7 @@ func createTestHandler(router *router.Router, logger *logrus.Logger) http.Handle
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		w.Write(respData)
+		_, _ = w.Write(respData)
 	})
 }
 
@@ -551,11 +551,12 @@ func sendJSONRPCRequest(url string, request interface{}) (interface{}, error) {
 		return nil, err
 	}
 
+	// #nosec G107 - 测试文件中使用变量URL是安全的
 	resp, err := http.Post(url, "application/json", bytes.NewReader(body))
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	// 根据请求类型决定返回类型
 	respBody, err := io.ReadAll(resp.Body)

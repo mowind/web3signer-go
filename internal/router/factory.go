@@ -30,20 +30,26 @@ func (f *RouterFactory) CreateRouter(mpcSigner *signer.MPCKMSSigner, downstreamC
 
 	// 注意：SignHandler 处理多个方法，所以我们需要为每个方法注册同一个处理器
 	// 在实际实现中，我们可能需要一个更智能的路由机制
-	router.Register(&MethodHandler{
+	if err := router.Register(&MethodHandler{
 		handler: signHandler,
 		method:  "eth_sign",
-	})
+	}); err != nil {
+		f.logger.WithError(err).Error("Failed to register eth_sign handler")
+	}
 
-	router.Register(&MethodHandler{
+	if err := router.Register(&MethodHandler{
 		handler: signHandler,
 		method:  "eth_signTransaction",
-	})
+	}); err != nil {
+		f.logger.WithError(err).Error("Failed to register eth_signTransaction handler")
+	}
 
-	router.Register(&MethodHandler{
+	if err := router.Register(&MethodHandler{
 		handler: signHandler,
 		method:  "eth_sendTransaction",
-	})
+	}); err != nil {
+		f.logger.WithError(err).Error("Failed to register eth_sendTransaction handler")
+	}
 
 	// 注册转发处理器（处理所有其他方法）
 	forwardHandler := NewForwardHandler(downstreamClient, f.logger)

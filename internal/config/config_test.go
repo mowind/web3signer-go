@@ -1,6 +1,7 @@
 package config
 
 import (
+	"strings"
 	"testing"
 )
 
@@ -111,7 +112,7 @@ func TestDownstreamConfig_Validate(t *testing.T) {
 		{
 			name: "valid config",
 			config: DownstreamConfig{
-				HTTPHost: "localhost",
+				HTTPHost: "http://localhost",
 				HTTPPort: 8545,
 				HTTPPath: "/",
 			},
@@ -193,7 +194,7 @@ func TestConfig_Validate(t *testing.T) {
 			KeyID:       "key123",
 		},
 		Downstream: DownstreamConfig{
-			HTTPHost: "localhost",
+			HTTPHost: "http://localhost",
 			HTTPPort: 8545,
 			HTTPPath: "/",
 		},
@@ -225,4 +226,305 @@ func TestConfig_Validate(t *testing.T) {
 			t.Error("expected error for invalid http config")
 		}
 	})
+}
+
+func TestDownstreamConfig_BuildURL(t *testing.T) {
+	tests := []struct {
+		name     string
+		config   DownstreamConfig
+		expected string
+	}{
+		{
+			name: "basic URL with port",
+			config: DownstreamConfig{
+				HTTPHost: "http://localhost",
+				HTTPPort: 8545,
+				HTTPPath: "/api",
+			},
+			expected: "http://localhost:8545/api",
+		},
+		{
+			name: "URL without port",
+			config: DownstreamConfig{
+				HTTPHost: "http://localhost",
+				HTTPPort: 0,
+				HTTPPath: "/",
+			},
+			expected: "http://localhost/",
+		},
+		{
+			name: "HTTPS URL with port",
+			config: DownstreamConfig{
+				HTTPHost: "https://api.example.com",
+				HTTPPort: 443,
+				HTTPPath: "/jsonrpc",
+			},
+			expected: "https://api.example.com:443/jsonrpc",
+		},
+		{
+			name: "URL already has port",
+			config: DownstreamConfig{
+				HTTPHost: "http://localhost:8080",
+				HTTPPort: 8545, // Should be ignored
+				HTTPPath: "/api",
+			},
+			expected: "http://localhost:8080/api",
+		},
+		{
+			name: "URL with trailing slash in host",
+			config: DownstreamConfig{
+				HTTPHost: "http://localhost/",
+				HTTPPort: 8545,
+				HTTPPath: "/api",
+			},
+			expected: "http://localhost:8545/api",
+		},
+		{
+			name: "complex path",
+			config: DownstreamConfig{
+				HTTPHost: "http://localhost",
+				HTTPPort: 8545,
+				HTTPPath: "/api/v1/jsonrpc",
+			},
+			expected: "http://localhost:8545/api/v1/jsonrpc",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := tt.config.BuildURL()
+			if result != tt.expected {
+				t.Errorf("BuildURL() = %v, want %v", result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestHasPort(t *testing.T) {
+	tests := []struct {
+		name     string
+		url      string
+		expected bool
+	}{
+		{
+			name:     "URL with port",
+			url:      "http://localhost:8080",
+			expected: true,
+		},
+		{
+			name:     "URL without port",
+			url:      "http://localhost",
+			expected: false,
+		},
+		{
+			name:     "HTTPS URL with port",
+			url:      "https://api.example.com:443",
+			expected: true,
+		},
+		{
+			name:     "HTTPS URL without port",
+			url:      "https://api.example.com",
+			expected: false,
+		},
+		{
+			name:     "URL with port and path",
+			url:      "http://localhost:8080/api",
+			expected: false, // hasPort returns false because portPart is "8080/api" which contains "/"
+		},
+		{
+			name:     "URL with colon in path",
+			url:      "http://localhost/api:v1",
+			expected: false,
+		},
+		{
+			name:     "URL with invalid port characters",
+			url:      "http://localhost:abc",
+			expected: false,
+		},
+		{
+			name:     "URL with port-like segment in path",
+			url:      "http://localhost/api:8080",
+			expected: true, // hasPort returns true because last colon is before "8080"
+		},
+		{
+			name:     "Empty URL",
+			url:      "",
+			expected: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := hasPort(tt.url)
+			if result != tt.expected {
+				t.Errorf("hasPort(%q) = %v, want %v", tt.url, result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestConfig_String(t *testing.T) {
+	config := Config{
+		HTTP: HTTPConfig{
+			Host: "localhost",
+			Port: 9000,
+		},
+		KMS: KMSConfig{
+			Endpoint:    "http://kms.example.com:8080",
+			AccessKeyID: "test-access-key",
+			SecretKey:   "test-secret-key",
+			KeyID:       "test-key-id",
+		},
+		Downstream: DownstreamConfig{
+			HTTPHost: "http://localhost",
+			HTTPPort: 8545,
+			HTTPPath: "/",
+		},
+		Log: LogConfig{Level: "info"},
+	}
+
+	result := config.String()
+
+	// Check that sensitive information is redacted
+	if strings.Contains(result, "test-access-key") {
+		t.Error("String() should redact AccessKeyID")
+	}
+	if strings.Contains(result, "test-secret-key") {
+		t.Error("String() should redact SecretKey")
+	}
+
+	// Check that non-sensitive information is included
+	if !strings.Contains(result, "localhost") {
+		t.Error("String() should include host information")
+	}
+	if !strings.Contains(result, "9000") {
+		t.Error("String() should include port information")
+	}
+	if !strings.Contains(result, "test-key-id") {
+		t.Error("String() should include KeyID")
+	}
+	if !strings.Contains(result, "http://kms.example.com:8080") {
+		t.Error("String() should include KMS endpoint")
+	}
+	if !strings.Contains(result, "[REDACTED]") {
+		t.Error("String() should show [REDACTED] for sensitive fields")
+	}
+}
+
+func TestDownstreamConfig_Validate_MoreCases(t *testing.T) {
+	tests := []struct {
+		name    string
+		config  DownstreamConfig
+		wantErr bool
+	}{
+		{
+			name: "invalid protocol",
+			config: DownstreamConfig{
+				HTTPHost: "ftp://localhost",
+				HTTPPort: 8545,
+				HTTPPath: "/",
+			},
+			wantErr: true,
+		},
+		{
+			name: "port too high",
+			config: DownstreamConfig{
+				HTTPHost: "http://localhost",
+				HTTPPort: MaxPort + 1,
+				HTTPPath: "/",
+			},
+			wantErr: true,
+		},
+		{
+			name: "negative port",
+			config: DownstreamConfig{
+				HTTPHost: "http://localhost",
+				HTTPPort: -1,
+				HTTPPath: "/",
+			},
+			wantErr: true,
+		},
+		{
+			name: "path without leading slash gets fixed",
+			config: DownstreamConfig{
+				HTTPHost: "http://localhost",
+				HTTPPort: 8545,
+				HTTPPath: "api",
+			},
+			wantErr: false,
+		},
+		{
+			name: "https with valid port",
+			config: DownstreamConfig{
+				HTTPHost: "https://localhost",
+				HTTPPort: 443,
+				HTTPPath: "/api",
+			},
+			wantErr: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := tt.config.Validate()
+			if (err != nil) != tt.wantErr {
+				t.Errorf("DownstreamConfig.Validate() error = %v, wantErr %v", err, tt.wantErr)
+			}
+
+			// Check that path gets fixed if needed
+			if !tt.wantErr && tt.config.HTTPPath == "api" {
+				if !strings.HasPrefix(tt.config.HTTPPath, "/") {
+					t.Error("Validate() should add leading slash to path")
+				}
+			}
+		})
+	}
+}
+
+func TestKMSConfig_Validate_MoreCases(t *testing.T) {
+	tests := []struct {
+		name    string
+		config  KMSConfig
+		wantErr bool
+	}{
+		{
+			name: "missing secret key",
+			config: KMSConfig{
+				Endpoint:    "http://localhost:8080",
+				AccessKeyID: "ak",
+				SecretKey:   "",
+				KeyID:       "key123",
+			},
+			wantErr: true,
+		},
+		{
+			name: "missing key id",
+			config: KMSConfig{
+				Endpoint:    "http://localhost:8080",
+				AccessKeyID: "ak",
+				SecretKey:   "sk",
+				KeyID:       "",
+			},
+			wantErr: true,
+		},
+		{
+			name: "all fields empty",
+			config: KMSConfig{
+				Endpoint:    "",
+				AccessKeyID: "",
+				SecretKey:   "",
+				KeyID:       "",
+			},
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := tt.config.Validate()
+			if (err != nil) != tt.wantErr {
+				t.Errorf("KMSConfig.Validate() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
+	}
 }

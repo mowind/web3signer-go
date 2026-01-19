@@ -65,7 +65,9 @@ func (c *Client) ForwardRequest(ctx context.Context, req *jsonrpc.Request) (*jso
 	if err != nil {
 		return nil, ConnectionError(err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 
 	// 读取响应体
 	respBody, err := io.ReadAll(resp.Body)
@@ -91,6 +93,7 @@ func (c *Client) ForwardRequest(ctx context.Context, req *jsonrpc.Request) (*jso
 		if !compareIDs(req.ID, jsonResp.ID) {
 			// 记录ID不匹配，但继续使用响应中的ID
 			// 在实际生产环境中可能需要记录警告
+			_ = fmt.Sprintf("ID mismatch: request ID %v, response ID %v", req.ID, jsonResp.ID)
 		}
 	} else if req.ID != nil {
 		// 如果请求有ID但响应没有，设置响应ID
@@ -126,7 +129,9 @@ func (c *Client) ForwardBatchRequest(ctx context.Context, requests []jsonrpc.Req
 	if err != nil {
 		return nil, ConnectionError(err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 
 	// 读取响应体
 	respBody, err := io.ReadAll(resp.Body)
@@ -162,6 +167,7 @@ func (c *Client) ForwardBatchRequest(ctx context.Context, requests []jsonrpc.Req
 			if !compareIDs(requests[i].ID, jsonResponses[i].ID) {
 				// 记录ID不匹配，但继续使用响应中的ID
 				// 在实际生产环境中可能需要记录警告
+				_ = fmt.Sprintf("Batch ID mismatch[%d]: request ID %v, response ID %v", i, requests[i].ID, jsonResponses[i].ID)
 			}
 		} else if requests[i].ID != nil {
 			// 如果请求有ID但响应没有，设置响应ID

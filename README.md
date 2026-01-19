@@ -25,7 +25,7 @@ A Go implementation of web3signer with MPC-KMS (Multi-Party Computation - Key Ma
 
 ### Prerequisites
 
-- Go 1.25.1 or later
+- Go 1.25 or later
 - MPC-KMS service endpoint
 - Downstream JSON-RPC service (e.g., Ethereum node)
 
@@ -257,6 +257,44 @@ This project is licensed under the GNU General Public License v3.0 (GPLv3). See 
 4. Add tests for new functionality
 5. Ensure all tests pass
 6. Submit a pull request
+
+### Development Setup
+
+#### Code Quality Tools
+
+This project uses several code quality tools:
+
+1. **golangci-lint** - Comprehensive Go linter
+   ```bash
+   make install-tools  # Install golangci-lint
+   make lint           # Run linter
+   ```
+
+2. **pre-commit hooks** - Git hooks for code quality
+   ```bash
+   # Install pre-commit
+   pip install pre-commit
+   
+   # Install hooks
+   pre-commit install
+   
+   # Run hooks on all files
+   pre-commit run --all-files
+   ```
+
+3. **Testing**
+   ```bash
+   make test           # Run tests
+   make test-coverage  # Run tests with coverage
+   make coverage       # Generate HTML coverage report
+   ```
+
+#### Code Style Guidelines
+
+- Follow standard Go conventions
+- Run `make fmt` before committing
+- Ensure `make lint` passes without errors
+- Maintain test coverage >80% for core components
 
 ## Acknowledgments
 

@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/mowind/web3signer-go/internal/config"
@@ -83,7 +84,7 @@ func testSignRequest(client *kms.Client) error {
 	}
 
 	if len(authHeader) < 20 {
-		return fmt.Errorf("Authorization头太短: %s", authHeader)
+		return fmt.Errorf("authorization header too short: %s", authHeader)
 	}
 
 	return nil
@@ -136,7 +137,7 @@ func testActualSign(client *kms.Client, kmsConfig *config.KMSConfig) error {
 			fmt.Printf("    ❌ 签名失败: %v\n", err)
 
 			// 如果是长度错误，提供建议
-			if contains(err.Error(), "bad sign message length") {
+			if strings.Contains(err.Error(), "bad sign message length") {
 				fmt.Println("    💡 建议: 确保消息长度为32字节（GG18算法要求）")
 			}
 
@@ -177,73 +178,4 @@ func testErrorHandling(client *kms.Client, kmsConfig *config.KMSConfig) error {
 	}
 
 	return nil
-}
-
-func isConnectionError(err error) bool {
-	errStr := err.Error()
-	// 检查常见的连接错误关键词
-	connectionErrors := []string{
-		"connection refused",
-		"timeout",
-		"no such host",
-		"network is unreachable",
-		"dial tcp",
-		"context deadline exceeded",
-	}
-
-	for _, keyword := range connectionErrors {
-		if contains(errStr, keyword) {
-			return true
-		}
-	}
-	return false
-}
-
-func isAuthError(err error) bool {
-	errStr := err.Error()
-	// 检查常见的认证错误关键词
-	authErrors := []string{
-		"unauthorized",
-		"forbidden",
-		"authentication",
-		"authorization",
-		"invalid signature",
-		"access denied",
-	}
-
-	for _, keyword := range authErrors {
-		if contains(errStr, keyword) {
-			return true
-		}
-	}
-	return false
-}
-
-func contains(s, substr string) bool {
-	return len(s) >= len(substr) && (s == substr ||
-		(len(s) > len(substr) && (s[:len(substr)] == substr ||
-			contains(s[1:], substr))))
-}
-
-// 辅助函数：手动构建请求测试签名
-func testManualRequest() {
-	fmt.Println("\n=== 手动构建请求测试 ===")
-
-	// 构建一个简单的HTTP请求
-	req, _ := http.NewRequest("GET", "http://10.2.8.108:8080/api/v1/keys/38HGvLc8nJ6KwQqn2PzCvZg70yJ", nil)
-
-	// 打印原始请求
-	fmt.Printf("原始请求:\n")
-	fmt.Printf("  Method: %s\n", req.Method)
-	fmt.Printf("  URL: %s\n", req.URL.String())
-	fmt.Printf("  Headers: %v\n", req.Header)
-
-	// 尝试添加手动计算的签名（仅用于调试）
-	fmt.Println("\n手动签名计算示例:")
-	fmt.Println("  1. Date: Mon, 15 Jan 2026 10:30:00 GMT")
-	fmt.Println("  2. Content-SHA256: 47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU=")
-	fmt.Println("  3. Content-Type: application/json")
-	fmt.Println("  4. 签名字符串: GET\\n47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU=\\napplication/json\\nMon, 15 Jan 2026 10:30:00 GMT")
-	fmt.Println("  5. 使用SecretKey计算HMAC-SHA256")
-	fmt.Println("  6. Authorization: MPC-KMS c609f7de1e154999bd1018026a665149:<signature>")
 }

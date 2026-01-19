@@ -123,7 +123,8 @@ func waitForInterrupt(server *server.Server) {
 	// 优雅关闭服务器
 	if err := server.Stop(ctx); err != nil {
 		fmt.Fprintf(os.Stderr, "Error during shutdown: %v\n", err)
-		os.Exit(1)
+		// 不调用os.Exit，让defer正常执行
+		return
 	}
 
 	fmt.Println("Server shutdown complete")

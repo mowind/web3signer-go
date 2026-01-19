@@ -68,7 +68,7 @@ func TestNewClient(t *testing.T) {
 
 			client := NewClient(&configCopy)
 			if client == nil {
-				t.Error("NewClient returned nil")
+				t.Fatal("NewClient returned nil")
 			}
 			if client.config != &configCopy {
 				t.Error("Config not set correctly")
@@ -125,7 +125,7 @@ func TestClient_ForwardRequest(t *testing.T) {
 		respData, _ := json.Marshal(resp)
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		w.Write(respData)
+		_, _ = w.Write(respData)
 	}))
 	defer server.Close()
 
@@ -206,7 +206,7 @@ func TestClient_ForwardBatchRequest(t *testing.T) {
 		respData, _ := json.Marshal(responses)
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		w.Write(respData)
+		_, _ = w.Write(respData)
 	}))
 	defer server.Close()
 
@@ -269,7 +269,7 @@ func TestClient_ForwardRequest_ErrorHandling(t *testing.T) {
 					return
 				}
 				conn, _, _ := hj.Hijack()
-				conn.Close()
+				_ = conn.Close()
 			},
 			expectedError:  "failed to connect to downstream service",
 			checkErrorType: IsConnectionError,
@@ -278,7 +278,7 @@ func TestClient_ForwardRequest_ErrorHandling(t *testing.T) {
 			name: "non-200 status code",
 			serverHandler: func(w http.ResponseWriter, r *http.Request) {
 				w.WriteHeader(http.StatusInternalServerError)
-				w.Write([]byte("Internal Server Error"))
+				_, _ = w.Write([]byte("Internal Server Error"))
 			},
 			expectedError:  "request to downstream service failed",
 			checkErrorType: func(err error) bool { return !IsConnectionError(err) },
@@ -288,7 +288,7 @@ func TestClient_ForwardRequest_ErrorHandling(t *testing.T) {
 			serverHandler: func(w http.ResponseWriter, r *http.Request) {
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusOK)
-				w.Write([]byte("invalid json"))
+				_, _ = w.Write([]byte("invalid json"))
 			},
 			expectedError:  "invalid response from downstream service",
 			checkErrorType: IsInvalidResponseError,
@@ -367,7 +367,7 @@ func TestClient_TestConnection(t *testing.T) {
 		respData, _ := json.Marshal(resp)
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		w.Write(respData)
+		_, _ = w.Write(respData)
 	}))
 	defer server.Close()
 
@@ -528,7 +528,7 @@ func TestSimpleForwarder(t *testing.T) {
 		respData, _ := json.Marshal(resp)
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		w.Write(respData)
+		_, _ = w.Write(respData)
 	}))
 	defer server.Close()
 

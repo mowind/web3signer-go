@@ -314,7 +314,7 @@ func (c *MockDownstreamClient) ForwardRequest(ctx context.Context, req *jsonrpc.
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	// 解析响应
 	var response jsonrpc.Response
@@ -345,7 +345,7 @@ func (c *MockDownstreamClient) ForwardBatchRequest(ctx context.Context, requests
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	// 解析响应
 	var responses []jsonrpc.Response

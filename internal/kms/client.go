@@ -159,7 +159,9 @@ func (c *Client) SignWithOptions(ctx context.Context, keyID string, message []by
 	if err != nil {
 		return nil, fmt.Errorf("failed to execute sign request: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 
 	// 读取响应体
 	respBody, err := io.ReadAll(resp.Body)
@@ -212,7 +214,9 @@ func (c *Client) GetTaskResult(ctx context.Context, taskID string) (*TaskResult,
 	if err != nil {
 		return nil, fmt.Errorf("failed to execute task request: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 
 	// 读取响应体
 	respBody, err := io.ReadAll(resp.Body)

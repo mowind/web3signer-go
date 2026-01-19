@@ -402,7 +402,7 @@ func TestContext_Operation(t *testing.T) {
 	}
 
 	// 测试nil context
-	nilOperation := GetOperation(nil)
+	nilOperation := GetOperation(context.Background())
 	if nilOperation != "" {
 		t.Errorf("Expected empty operation for nil context, got '%s'", nilOperation)
 	}

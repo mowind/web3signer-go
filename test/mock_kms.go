@@ -132,7 +132,7 @@ func (m *MockKMSServer) handleSign(w http.ResponseWriter, r *http.Request) {
 		m.writeError(w, http.StatusBadRequest, "InvalidRequest", "Failed to read request body")
 		return
 	}
-	defer r.Body.Close()
+	defer func() { _ = r.Body.Close() }()
 
 	// 重新设置 Body，以便后续处理
 	r.Body = io.NopCloser(bytes.NewReader(body))
@@ -172,7 +172,7 @@ func (m *MockKMSServer) handleSign(w http.ResponseWriter, r *http.Request) {
 			TaskID: fmt.Sprintf("task_%d", time.Now().Unix()),
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(resp)
+		_ = json.NewEncoder(w).Encode(resp)
 		return
 	}
 
@@ -181,7 +181,7 @@ func (m *MockKMSServer) handleSign(w http.ResponseWriter, r *http.Request) {
 		Signature: signature,
 	}
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(resp)
+	_ = json.NewEncoder(w).Encode(resp)
 }
 
 // handleTask 处理任务查询
@@ -204,13 +204,13 @@ func (m *MockKMSServer) handleTask(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(result)
+	_ = json.NewEncoder(w).Encode(result)
 }
 
 // handleHealth 处理健康检查
 func (m *MockKMSServer) handleHealth(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{"status": "healthy"})
+	_ = json.NewEncoder(w).Encode(map[string]string{"status": "healthy"})
 }
 
 // validateAuth 验证请求认证
@@ -296,7 +296,7 @@ func (m *MockKMSServer) writeError(w http.ResponseWriter, statusCode int, code, 
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(statusCode)
-	json.NewEncoder(w).Encode(errResp)
+	_ = json.NewEncoder(w).Encode(errResp)
 }
 
 // Helper functions (复制自真实客户端)
@@ -427,7 +427,7 @@ func (c *MockKMSClient) callSignEndpoint(keyID string, req kms.SignRequest) (*km
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		var errResp kms.ErrorResponse
@@ -464,7 +464,7 @@ func (c *MockKMSClient) callTaskEndpoint(keyID string, req kms.SignRequest) (*km
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		var errResp kms.ErrorResponse

@@ -112,7 +112,9 @@ func registerFlags(cmd *cobra.Command) error {
 
 		// 标记必需标志
 		if flag.Required {
-			cmd.MarkFlagRequired(flag.Name)
+			if err := cmd.MarkFlagRequired(flag.Name); err != nil {
+				return fmt.Errorf("failed to mark flag %s as required: %w", flag.Name, err)
+			}
 		}
 	}
 

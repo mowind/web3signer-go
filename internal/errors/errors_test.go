@@ -62,7 +62,7 @@ func TestWrap_NilError(t *testing.T) {
 
 func TestWithContext(t *testing.T) {
 	appErr := New(ErrorTypeInternal, jsonrpc.CodeInternalError, "Test error")
-	appErr.WithContext("key1", "value1").WithContext("key2", 123)
+	_ = appErr.WithContext("key1", "value1").WithContext("key2", 123)
 
 	if appErr.Context["key1"] != "value1" {
 		t.Errorf("Expected context key1='value1', got '%v'", appErr.Context["key1"])
@@ -75,7 +75,7 @@ func TestWithContext(t *testing.T) {
 
 func TestWithDetails(t *testing.T) {
 	appErr := New(ErrorTypeInternal, jsonrpc.CodeInternalError, "Test error")
-	appErr.WithDetails("Additional details")
+	_ = appErr.WithDetails("Additional details")
 
 	if appErr.Details != "Additional details" {
 		t.Errorf("Expected details 'Additional details', got '%s'", appErr.Details)
@@ -503,5 +503,5 @@ func TestMustConvertError(t *testing.T) {
 			t.Error("Expected panic for nil input")
 		}
 	}()
-	MustConvertError(nil)
+	_ = MustConvertError(nil)
 }

@@ -110,8 +110,9 @@ func (s *Server) Start() error {
 	addr := fmt.Sprintf("%s:%d", s.config.HTTP.Host, s.config.HTTP.Port)
 
 	s.server = &http.Server{
-		Addr:    addr,
-		Handler: s.router,
+		Addr:              addr,
+		Handler:           s.router,
+		ReadHeaderTimeout: 5 * time.Second,
 	}
 
 	s.logger.WithFields(logrus.Fields{

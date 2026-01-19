@@ -168,29 +168,13 @@ func createOutput(output string) (*os.File, error) {
 		return os.Stderr, nil
 	default:
 		// 尝试作为文件路径
-		file, err := os.OpenFile(output, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
+		// #nosec G304 - 日志文件路径来自配置，不是用户输入
+		file, err := os.OpenFile(output, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0600)
 		if err != nil {
 			return nil, fmt.Errorf("failed to open log file %s: %w", output, err)
 		}
 		return file, nil
 	}
-}
-
-// getLogLevel 获取日志级别
-func getLogLevel(level string) logrus.Level {
-	levelMap := map[string]logrus.Level{
-		"debug": logrus.DebugLevel,
-		"info":  logrus.InfoLevel,
-		"warn":  logrus.WarnLevel,
-		"error": logrus.ErrorLevel,
-		"fatal": logrus.FatalLevel,
-		"panic": logrus.PanicLevel,
-	}
-
-	if lvl, ok := levelMap[strings.ToLower(level)]; ok {
-		return lvl
-	}
-	return logrus.InfoLevel
 }
 
 // Standard logging methods 标准日志方法

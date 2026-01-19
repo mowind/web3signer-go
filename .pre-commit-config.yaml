@@ -1,0 +1,44 @@
+# pre-commit configuration file
+# See https://pre-commit.com for more information
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.5.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-added-large-files
+      - id: check-merge-conflict
+      - id: check-symlinks
+      - id: detect-private-key
+
+  - repo: https://github.com/dnephin/pre-commit-golang
+    rev: v0.5.0
+    hooks:
+      - id: go-fmt
+      - id: go-vet
+      - id: go-build
+      - id: go-mod-tidy
+        args: [--diff]
+
+  - repo: local
+    hooks:
+      - id: go-test
+        name: go test
+        entry: bash -c 'cd "$(git rev-parse --show-toplevel)" && go test ./... -short'
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [commit]
+
+      - id: golangci-lint
+        name: golangci-lint
+        entry: bash -c 'cd "$(git rev-parse --show-toplevel)" && make lint'
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [commit]
+
+# Exclude certain files from hooks
+exclude: '^vendor/|\.pb\.go$|\.pb\.gw\.go$'

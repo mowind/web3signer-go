@@ -147,8 +147,7 @@ func TestMPCKMSSigner_SignTransaction(t *testing.T) {
 					}
 					if summary == nil {
 						t.Error("Expected summary but got nil")
-					}
-					if summary.Type != string(SummaryTypeTransfer) {
+					} else if summary.Type != string(SummaryTypeTransfer) {
 						t.Errorf("Expected summary type TRANSFER, got %s", summary.Type)
 					}
 					return tt.expectedSig, nil
@@ -183,7 +182,7 @@ func TestNewMPCKMSSigner(t *testing.T) {
 	signer := NewMPCKMSSigner(client, cfg.KeyID)
 
 	if signer == nil {
-		t.Error("NewMPCKMSSigner returned nil")
+		t.Fatal("NewMPCKMSSigner returned nil")
 	}
 	if signer.keyID != cfg.KeyID {
 		t.Errorf("Expected keyID %s, got %s", cfg.KeyID, signer.keyID)

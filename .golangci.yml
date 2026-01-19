@@ -1,0 +1,48 @@
+# golangci-lint configuration file
+# Reference: https://golangci-lint.run/usage/configuration/
+
+version: "2"
+
+# Use default linters with some customizations
+linters:
+  # Enable default linters
+  disable-all: false
+  
+  # Enable additional linters
+  enable:
+    - gosec
+    - gocritic
+    - gocyclo
+
+linters-settings:
+  gocyclo:
+    min-complexity: 15
+  gocritic:
+    enabled-tags:
+      - diagnostic
+      - style
+      - performance
+  gosec:
+    excludes:
+      - G101 # Potential hardcoded credentials
+      - G107 # Potential HTTP request made with variable url
+      - G204 # Audit use of command execution
+      - G304 # Potential file inclusion via variable
+
+issues:
+  exclude-rules:
+    # Exclude generated files
+    - path: _test\.go
+      linters:
+        - gocyclo
+        - gosec
+
+  max-issues-per-linter: 0
+  max-same-issues: 0
+
+  exclude:
+    - "exported (method|function|type|const|var) .* should have comment or be unexported"
+    - "Error return value of .* is not checked"
+    - "G104: Errors unhandled"
+
+  exclude-use-default: false

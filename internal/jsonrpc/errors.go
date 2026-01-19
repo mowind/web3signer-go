@@ -94,7 +94,7 @@ func Errorf(code int, format string, args ...interface{}) *Error {
 
 // IsServerError 检查错误码是否为服务器错误
 func IsServerError(code int) bool {
-	return code >= CodeServerErrorStart && code <= CodeServerErrorEnd
+	return code >= CodeServerErrorEnd && code <= CodeServerErrorStart
 }
 
 // Error 实现 error 接口
