@@ -160,15 +160,6 @@ func (h *SignHandler) handleEthSendTransaction(ctx context.Context, request *int
 		return h.CreateInvalidParamsResponse(request.ID, "From address mismatch"), nil
 	}
 
-	chainID, err := h.downstreamRPC.Eth().ChainID()
-	if err != nil {
-		h.logger.WithError(err).Error("Failed to get chainId from downstream")
-		return h.CreateErrorResponse(request.ID, internaljsonrpc.CodeInternalError,
-			"Failed to get chainId", err.Error()), nil
-	}
-
-	h.logger.WithField("chainId", chainID).Debug("Retrieved chainId from downstream")
-
 	gasPrice, err := h.downstreamRPC.Eth().GasPrice()
 	if err != nil {
 		h.logger.WithError(err).Error("Failed to get gasPrice from downstream")
@@ -178,7 +169,6 @@ func (h *SignHandler) handleEthSendTransaction(ctx context.Context, request *int
 
 	h.logger.WithField("gasPrice", gasPrice).Debug("Retrieved gasPrice from downstream")
 
-	txParams.ChainID = chainID.String()
 	if txParams.GasPrice == "" || txParams.GasPrice == "0" {
 		txParams.GasPrice = new(big.Int).SetUint64(gasPrice).String()
 	}
@@ -188,8 +178,6 @@ func (h *SignHandler) handleEthSendTransaction(ctx context.Context, request *int
 		h.logger.WithError(err).Error("Failed to build transaction")
 		return h.CreateInvalidParamsResponse(request.ID, fmt.Sprintf("Failed to build transaction: %v", err)), nil
 	}
-
-	tx.ChainID = chainID
 
 	signedTx, err := h.signer.SignTransaction(tx)
 	if err != nil {
