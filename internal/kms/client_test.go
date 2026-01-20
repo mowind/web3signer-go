@@ -443,36 +443,37 @@ func TestClient_SignWithOptions(t *testing.T) {
 
 	client := NewClient(cfg, defaultLogConfig())
 
-	// 创建mock服务器
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// 验证认证头
 		authHeader := r.Header.Get("Authorization")
 		if !strings.Contains(authHeader, "MPC-KMS") {
 			w.WriteHeader(http.StatusUnauthorized)
 			return
 		}
 
-		// 验证方法
-		if r.Method != "POST" {
-			w.WriteHeader(http.StatusMethodNotAllowed)
+		if r.Method == "POST" && r.URL.Path == "/api/v1/keys/test-key-id/sign" {
+			resp := TaskResponse{
+				TaskID: "task-12345",
+			}
+
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusCreated)
+			_ = json.NewEncoder(w).Encode(resp)
 			return
 		}
 
-		// 验证路径
-		expectedPath := "/api/v1/keys/test-key-id/sign"
-		if r.URL.Path != expectedPath {
-			w.WriteHeader(http.StatusNotFound)
+		if r.Method == "GET" && r.URL.Path == "/api/v1/tasks/task-12345" {
+			errResp := ErrorResponse{
+				Code:    403,
+				Message: "signature requires approval",
+			}
+
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusForbidden)
+			_ = json.NewEncoder(w).Encode(errResp)
 			return
 		}
 
-		// 模拟需要审批的响应
-		resp := TaskResponse{
-			TaskID: "task-12345",
-		}
-
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusCreated)
-		_ = json.NewEncoder(w).Encode(resp)
+		w.WriteHeader(http.StatusNotFound)
 	}))
 	defer server.Close()
 

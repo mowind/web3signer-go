@@ -261,6 +261,16 @@ func TestBuilder_createGinRouter_handleJSONRPCRequest(t *testing.T) {
 }
 
 func TestBuilder_createGinRouter_Build(t *testing.T) {
+	mockDownstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"jsonrpc": "2.0",
+			"id":      uint64(1),
+			"result":  "0x1",
+		})
+	}))
+	defer mockDownstream.Close()
+
 	cfg := &config.Config{
 		KMS: config.KMSConfig{
 			Endpoint:    "http://localhost:8080",
@@ -270,11 +280,11 @@ func TestBuilder_createGinRouter_Build(t *testing.T) {
 			Address:     "0x1234567890123456789012345678901234567890",
 		},
 		Downstream: config.DownstreamConfig{
-			HTTPHost: "http://localhost",
-			HTTPPort: 8545,
+			HTTPHost: mockDownstream.URL,
+			HTTPPort: 0,
 			HTTPPath: "/",
 		},
-		Log: config.LogConfig{Level: config.LogLevelDebug},
+		Log: config.LogConfig{Level: config.LogLevelError},
 	}
 
 	builder := NewBuilder(cfg)

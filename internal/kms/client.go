@@ -189,7 +189,6 @@ func (c *Client) SignWithOptions(ctx context.Context, keyID string, message []by
 		return []byte(signResp.Signature), nil
 
 	case http.StatusCreated:
-		// 需要审批，自动轮询任务结果
 		taskResp, err := UnmarshalTaskResponse(respBody)
 		if err != nil {
 			return nil, fmt.Errorf("failed to unmarshal task response: %w", err)
@@ -201,7 +200,6 @@ func (c *Client) SignWithOptions(ctx context.Context, keyID string, message []by
 			"status":  "pending_approval",
 		}).Info("Sign request requires approval, starting task polling")
 
-		// 轮询任务完成(最多等待5分钟)
 		ctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
 		defer cancel()
 
@@ -211,7 +209,7 @@ func (c *Client) SignWithOptions(ctx context.Context, keyID string, message []by
 				"task_id": taskResp.TaskID,
 				"error":   err.Error(),
 			}).Error("Task polling failed")
-			return nil, fmt.Errorf("task polling failed: %w", err)
+			return nil, fmt.Errorf("task polling failed for task %s: %w", taskResp.TaskID, err)
 		}
 
 		// 返回签名结果
@@ -250,46 +248,39 @@ func (c *Client) SignWithOptions(ctx context.Context, keyID string, message []by
 	}
 }
 
-// GetTaskResult 获取任务结果
 func (c *Client) GetTaskResult(ctx context.Context, taskID string) (*TaskResult, error) {
-	// 构建请求URL
 	url := fmt.Sprintf("%s/api/v1/tasks/%s", c.kmsConfig.Endpoint, taskID)
 
-	// 创建HTTP请求
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
+		return nil, fmt.Errorf("failed to create request for task %s: %w", taskID, err)
 	}
 
-	// 执行请求
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("failed to execute task request: %w", err)
+		return nil, fmt.Errorf("failed to execute task request for task %s: %w", taskID, err)
 	}
 	defer func() {
 		_ = resp.Body.Close()
 	}()
 
-	// 读取响应体
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read response body: %w", err)
+		return nil, fmt.Errorf("failed to read response body for task %s: %w", taskID, err)
 	}
 
-	// 记录任务结果响应（安全，不包含敏感信息）
 	c.logger.WithFields(logrus.Fields{
 		"task_id":       taskID,
 		"status_code":   resp.StatusCode,
 		"response_body": string(respBody),
 	}).Debug("Task result response")
 
-	// 检查HTTP状态码
 	if resp.StatusCode != http.StatusOK {
 		errResp, _ := UnmarshalErrorResponse(respBody)
 		if errResp != nil {
-			return nil, fmt.Errorf("MPC-KMS error (code: %d): %s", errResp.Code, errResp.Message)
+			return nil, fmt.Errorf("MPC-KMS error for task %s (code: %d): %s", taskID, errResp.Code, errResp.Message)
 		}
-		return nil, fmt.Errorf("MPC-KMS request failed with status: %d", resp.StatusCode)
+		return nil, fmt.Errorf("MPC-KMS request failed for task %s with status: %d", taskID, resp.StatusCode)
 	}
 
 	// 解析任务结果

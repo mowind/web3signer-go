@@ -80,12 +80,14 @@ func (b *Builder) setGinMode() {
 	}
 }
 
-// createGinRouter 创建 gin 路由器
 func (b *Builder) createGinRouter(jsonRPCRouter *router.Router, logger *logrus.Logger) *gin.Engine {
 	router := gin.New()
 
-	// 添加请求 ID 中间件
 	router.Use(b.requestIDMiddleware())
+
+	if logger == nil {
+		logger = b.createLogger()
+	}
 	router.Use(ginlogrus.Logger(logger))
 	router.Use(gin.Recovery())
 	router.Use(b.corsMiddleware())
@@ -203,13 +205,16 @@ func (b *Builder) handleJSONRPCRequest(jsonRPCRouter *router.Router) gin.Handler
 	}
 }
 
-// getLoggerWithContext 获取带上下文的 logger
 func (b *Builder) getLoggerWithContext(c *gin.Context) *logrus.Entry {
-	logger := b.logger.WithField("component", "http_server")
-	if requestID, exists := c.Get("request_id"); exists {
-		logger = logger.WithField("request_id", requestID)
+	logger := b.logger
+	if logger == nil {
+		logger = b.createLogger()
 	}
-	return logger
+	entry := logger.WithField("component", "http_server")
+	if requestID, exists := c.Get("request_id"); exists {
+		entry = entry.WithField("request_id", requestID)
+	}
+	return entry
 }
 
 // corsMiddleware 处理CORS请求

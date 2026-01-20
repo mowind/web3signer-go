@@ -39,7 +39,12 @@ func TestTestActualSign(t *testing.T) {
 		KeyID:       "test-key-id",
 	}
 
-	client := kms.NewClient(kmsConfig)
+	logConfig := &config.LogConfig{
+		Level:  config.LogLevelInfo,
+		Format: config.LogFormatText,
+	}
+
+	client := kms.NewClient(kmsConfig, logConfig)
 
 	// Test the testActualSign function
 	err := testActualSign(client, kmsConfig)
@@ -58,7 +63,12 @@ func TestTestErrorHandling(t *testing.T) {
 		KeyID:       "test-key-id",
 	}
 
-	client := kms.NewClient(kmsConfig)
+	logConfig := &config.LogConfig{
+		Level:  config.LogLevelInfo,
+		Format: config.LogFormatText,
+	}
+
+	client := kms.NewClient(kmsConfig, logConfig)
 
 	// Test the testErrorHandling function
 	err := testErrorHandling(client, kmsConfig)
