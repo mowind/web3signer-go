@@ -322,19 +322,19 @@ func TestNewSignRequest(t *testing.T) {
 		},
 		{
 			name:     "hex encoding",
-			data:     []byte("0x123456"),
+			data:     []byte{0x12, 0x34, 0x56}, // 原始字节数据
 			encoding: DataEncodingHex,
 			expected: &SignRequest{
-				Data:         "0x123456",
+				Data:         "123456", // HEX编码，不带0x前缀
 				DataEncoding: "HEX",
 			},
 		},
 		{
 			name:     "base64 encoding",
-			data:     []byte("dGVzdCBkYXRh"),
+			data:     []byte("test data"), // 原始字符串数据
 			encoding: DataEncodingBase64,
 			expected: &SignRequest{
-				Data:         "dGVzdCBkYXRh",
+				Data:         "dGVzdCBkYXRh", // Base64编码结果
 				DataEncoding: "BASE64",
 			},
 		},

@@ -1,6 +1,7 @@
 package signer
 
 import (
+	"bytes"
 	"context"
 	"encoding/hex"
 	"fmt"
@@ -86,9 +87,8 @@ func TestMPCKMSSigner_Sign(t *testing.T) {
 				t.Errorf("Expected keyID %s, got %s", "test-key-id", keyID)
 			}
 
-			expectedHex := hex.EncodeToString(expectedHash)
-			if string(message) != expectedHex {
-				t.Errorf("Expected message %s, got %s", expectedHex, string(message))
+			if !bytes.Equal(message, expectedHash) {
+				t.Errorf("Expected message %x, got %x", expectedHash, message)
 			}
 
 			// 返回一个有效的十六进制编码的签名（65字节）

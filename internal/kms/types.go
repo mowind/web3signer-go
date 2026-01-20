@@ -1,6 +1,8 @@
 package kms
 
 import (
+	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 )
 
@@ -77,9 +79,9 @@ func NewSignRequest(data []byte, encoding DataEncoding) *SignRequest {
 	var dataStr string
 	switch encoding {
 	case DataEncodingBase64:
-		dataStr = string(data) // 假设已经是 base64 编码
+		dataStr = base64.StdEncoding.EncodeToString(data)
 	case DataEncodingHex:
-		dataStr = string(data) // 假设已经是 hex 编码
+		dataStr = hex.EncodeToString(data)
 	default: // DataEncodingPlain
 		dataStr = string(data)
 	}

@@ -350,6 +350,20 @@ func TestClient_Sign(t *testing.T) {
 			return
 		}
 
+		// 读取并验证请求体
+		body, _ := io.ReadAll(r.Body)
+		var req SignRequest
+		if err := json.Unmarshal(body, &req); err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+
+		// 验证数据编码
+		if req.DataEncoding != "HEX" && req.DataEncoding != "PLAIN" {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+
 		// 模拟成功响应
 		resp := SignResponse{
 			Signature: "test-signature-12345",
@@ -372,7 +386,7 @@ func TestClient_Sign(t *testing.T) {
 	}{
 		{
 			name:        "hex encoded message",
-			message:     []byte("48656c6c6f20576f726c64"), // "Hello World" in hex
+			message:     []byte("Hello World"), // 原始数据，将被HEX编码
 			encoding:    DataEncodingHex,
 			expectError: false,
 		},

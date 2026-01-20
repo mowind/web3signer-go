@@ -41,9 +41,7 @@ func (s *MPCKMSSigner) Sign(hash []byte) ([]byte, error) {
 		return nil, fmt.Errorf("invalid hash length: expected 32 bytes, got %d", len(hash))
 	}
 
-	hashHex := hex.EncodeToString(hash)
-
-	signatureHex, err := s.client.Sign(context.Background(), s.keyID, []byte(hashHex))
+	signatureHex, err := s.client.Sign(context.Background(), s.keyID, hash)
 	if err != nil {
 		return nil, fmt.Errorf("failed to sign with MPC-KMS: %v", err)
 	}
@@ -290,12 +288,11 @@ func (s *MPCKMSSigner) SignTransactionWithSummary(tx *ethgo.Transaction, summary
 	txCopy.From = s.address
 
 	hash := s.signHash(txCopy)
-	hashHex := hex.EncodeToString(hash)
 
 	signatureHex, err := s.client.SignWithOptions(
 		context.Background(),
 		s.keyID,
-		[]byte(hashHex),
+		hash,
 		kms.DataEncodingHex,
 		summary,
 		"",
