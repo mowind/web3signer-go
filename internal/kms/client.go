@@ -3,14 +3,10 @@ package kms
 import (
 	"bytes"
 	"context"
-	"crypto/hmac"
-	"crypto/sha256"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/mowind/web3signer-go/internal/config"
@@ -19,105 +15,23 @@ import (
 // Client 表示 MPC-KMS 客户端
 type Client struct {
 	config     *config.KMSConfig
-	httpClient *http.Client
+	httpClient HTTPClientInterface
 }
 
 // NewClient 创建新的 MPC-KMS 客户端
 func NewClient(cfg *config.KMSConfig) *Client {
 	return &Client{
-		config: cfg,
-		httpClient: &http.Client{
-			Timeout: 30 * time.Second,
-		},
+		config:     cfg,
+		httpClient: NewHTTPClient(cfg),
 	}
 }
 
-// SignRequest 对 HTTP 请求进行签名（根据 MPC-KMS 文档规范）
-func (c *Client) SignRequest(req *http.Request, body []byte) error {
-	// 1. 生成 GMT 格式的时间戳
-	date := time.Now().UTC().Format("Mon, 02 Jan 2006 15:04:05 GMT")
-
-	// 2. 计算 Content-SHA256
-	contentSHA256 := calculateContentSHA256(body)
-
-	// 3. 获取 Content-Type
-	contentType := req.Header.Get("Content-Type")
-	if contentType == "" {
-		contentType = "application/json"
+// NewClientWithHTTPClient 创建新的 MPC-KMS 客户端，使用指定的 HTTP 客户端
+func NewClientWithHTTPClient(cfg *config.KMSConfig, httpClient HTTPClientInterface) *Client {
+	return &Client{
+		config:     cfg,
+		httpClient: httpClient,
 	}
-
-	// 4. 构建签名字符串（根据文档规范）
-	signingString := buildSigningString(req.Method, contentSHA256, contentType, date)
-
-	// 5. 计算 HMAC-SHA256 签名
-	signature := calculateHMACSHA256(signingString, c.config.SecretKey)
-
-	// 6. 构建 Authorization 头（根据文档规范）
-	authHeader := buildAuthorizationHeader(c.config.AccessKeyID, signature)
-
-	// 7. 设置请求头
-	req.Header.Set("Authorization", authHeader)
-	req.Header.Set("Date", date)
-	req.Header.Set("Content-Type", contentType)
-
-	return nil
-}
-
-// calculateContentSHA256 计算内容的 SHA256 哈希（base64编码）
-func calculateContentSHA256(data []byte) string {
-	if len(data) == 0 {
-		// 空内容的 SHA256
-		hash := sha256.Sum256([]byte(""))
-		return base64.StdEncoding.EncodeToString(hash[:])
-	}
-	hash := sha256.Sum256(data)
-	return base64.StdEncoding.EncodeToString(hash[:])
-}
-
-// buildSigningString 构建签名字符串（根据文档规范）
-func buildSigningString(verb, contentSHA256, contentType, date string) string {
-	// 格式：VERB + "\n" + Content-SHA256 + "\n" + Content-Type + "\n" + Date
-	return fmt.Sprintf("%s\n%s\n%s\n%s",
-		verb,
-		contentSHA256,
-		contentType,
-		date,
-	)
-}
-
-// calculateHMACSHA256 计算 HMAC-SHA256 签名（base64编码）
-func calculateHMACSHA256(message, secretKey string) string {
-	mac := hmac.New(sha256.New, []byte(secretKey))
-	mac.Write([]byte(message))
-	return base64.StdEncoding.EncodeToString(mac.Sum(nil))
-}
-
-// buildAuthorizationHeader 构建 Authorization 头（根据文档规范）
-func buildAuthorizationHeader(accessKeyID, signature string) string {
-	// 格式：MPC-KMS AK:Signature
-	return fmt.Sprintf("MPC-KMS %s:%s", accessKeyID, signature)
-}
-
-// Do 执行已签名的 HTTP 请求
-func (c *Client) Do(req *http.Request) (*http.Response, error) {
-	// 读取请求体以便计算哈希
-	var body []byte
-	if req.Body != nil {
-		var err error
-		body, err = io.ReadAll(req.Body)
-		if err != nil {
-			return nil, fmt.Errorf("failed to read request body: %w", err)
-		}
-		req.Body = io.NopCloser(strings.NewReader(string(body)))
-	}
-
-	// 签名请求
-	if err := c.SignRequest(req, body); err != nil {
-		return nil, fmt.Errorf("failed to sign request: %w", err)
-	}
-
-	// 执行请求
-	return c.httpClient.Do(req)
 }
 
 // Sign 调用 MPC-KMS 签名端点
@@ -155,7 +69,7 @@ func (c *Client) SignWithOptions(ctx context.Context, keyID string, message []by
 	req.Header.Set("Content-Type", "application/json")
 
 	// 执行请求
-	resp, err := c.Do(req)
+	resp, err := c.httpClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to execute sign request: %w", err)
 	}
@@ -210,7 +124,7 @@ func (c *Client) GetTaskResult(ctx context.Context, taskID string) (*TaskResult,
 	}
 
 	// 执行请求
-	resp, err := c.Do(req)
+	resp, err := c.httpClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to execute task request: %w", err)
 	}

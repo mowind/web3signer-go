@@ -2,7 +2,6 @@ package kms
 
 import (
 	"context"
-	"net/http"
 	"time"
 )
 
@@ -19,9 +18,6 @@ type ClientInterface interface {
 
 	// WaitForTaskCompletion 等待任务完成
 	WaitForTaskCompletion(ctx context.Context, taskID string, interval time.Duration) (*TaskResult, error)
-
-	// Do 执行已签名的 HTTP 请求
-	Do(req *http.Request) (*http.Response, error)
 }
 
 // Signer 定义签名器接口
