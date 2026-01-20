@@ -459,7 +459,6 @@ This project is licensed under the GNU General Public License v3.0 (GPLv3). See 
 - 📖 **Documentation**: See [CLAUDE.md](CLAUDE.md) for AI-assisted development
 - 🐛 **Bug Reports**: [GitHub Issues](https://github.com/mowind/web3signer-go/issues)
 - 💡 **Feature Requests**: [GitHub Discussions](https://github.com/mowind/web3signer-go/discussions)
-- 📧 **Security**: security@mowind.com
 
 ---
 
