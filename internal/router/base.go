@@ -88,11 +88,17 @@ func (h *BaseHandler) CreateInvalidParamsResponse(id interface{}, message string
 
 // LogRequest 记录请求日志
 func (h *BaseHandler) LogRequest(request *jsonrpc.Request) {
-	h.logger.WithFields(logrus.Fields{
+	fields := logrus.Fields{
 		"method": request.Method,
 		"id":     request.ID,
-		"params": string(request.Params),
-	}).Debug("Processing JSON-RPC request")
+	}
+
+	// Debug 级别记录完整的 params（生产环境不记录）
+	if h.logger.IsLevelEnabled(logrus.DebugLevel) {
+		fields["params"] = string(request.Params)
+	}
+
+	h.logger.WithFields(fields).Info("Received request")
 }
 
 // LogResponse 记录响应日志
@@ -111,6 +117,11 @@ func (h *BaseHandler) LogResponse(request *jsonrpc.Request, response *jsonrpc.Re
 		fields["error_message"] = response.Error.Message
 		h.logger.WithFields(fields).Warn("Request returned error")
 	default:
-		h.logger.WithFields(fields).Debug("Request processed successfully")
+		// 成功时记录 Info，让生产环境可见
+		// Debug 级别记录完整的 result
+		if h.logger.IsLevelEnabled(logrus.DebugLevel) && response.Result != nil {
+			fields["result"] = string(response.Result)
+		}
+		h.logger.WithFields(fields).Info("Request completed")
 	}
 }

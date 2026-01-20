@@ -91,7 +91,9 @@ func (h *SignHandler) handleEthSign(ctx context.Context, request *internaljsonrp
 		return h.CreateInvalidParamsResponse(request.ID, "Address mismatch"), nil
 	}
 
-	h.logger.WithField("data_length", len(data)).Debug("Processing eth_sign request")
+	h.logger.WithFields(logrus.Fields{
+		"data_length": len(data),
+	}).Info("Signing data")
 
 	signatureHex, err := h.signer.Sign(data)
 	if err != nil {
@@ -102,7 +104,7 @@ func (h *SignHandler) handleEthSign(ctx context.Context, request *internaljsonrp
 
 	signature := hex.EncodeToString(signatureHex)
 
-	h.logger.Debug("eth_sign completed successfully")
+	h.logger.Info("Data signed successfully")
 	return h.CreateSuccessResponse(request.ID, signature)
 }
 
@@ -114,7 +116,10 @@ func (h *SignHandler) handleEthSignTransaction(ctx context.Context, request *int
 		return h.CreateInvalidParamsResponse(request.ID, fmt.Sprintf("Invalid transaction parameters: %v", err)), nil
 	}
 
-	h.logger.WithField("from", txParams.From).Debug("Processing eth_signTransaction request")
+	h.logger.WithFields(logrus.Fields{
+		"from": txParams.From,
+		"to":   txParams.To,
+	}).Info("Signing transaction")
 
 	expectedAddress := h.signer.Address().String()
 	if strings.ToLower(txParams.From) != strings.ToLower(expectedAddress) {
@@ -138,7 +143,7 @@ func (h *SignHandler) handleEthSignTransaction(ctx context.Context, request *int
 			"Failed to sign transaction", err.Error()), nil
 	}
 
-	h.logger.Debug("eth_signTransaction completed successfully")
+	h.logger.Info("Transaction signed successfully")
 	return h.CreateSuccessResponse(request.ID, signedTx)
 }
 
@@ -150,7 +155,10 @@ func (h *SignHandler) handleEthSendTransaction(ctx context.Context, request *int
 		return h.CreateInvalidParamsResponse(request.ID, fmt.Sprintf("Invalid transaction parameters: %v", err)), nil
 	}
 
-	h.logger.WithField("from", txParams.From).Debug("Processing eth_sendTransaction request")
+	h.logger.WithFields(logrus.Fields{
+		"from": txParams.From,
+		"to":   txParams.To,
+	}).Info("Sending transaction")
 
 	expectedAddress := h.signer.Address().String()
 	if strings.ToLower(txParams.From) != strings.ToLower(expectedAddress) {
@@ -279,7 +287,7 @@ func (h *SignHandler) handleEthSendTransaction(ctx context.Context, request *int
 			forwardResponse.Error.Message, forwardResponse.Error.Data), nil
 	}
 
-	h.logger.Debug("eth_sendTransaction completed successfully")
+	h.logger.Info("Transaction sent successfully")
 	forwardResponse.ID = request.ID
 	forwardResponse.JSONRPC = internaljsonrpc.JSONRPCVersion
 	return forwardResponse, nil

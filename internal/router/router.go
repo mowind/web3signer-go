@@ -85,7 +85,7 @@ func (r *Router) Route(ctx context.Context, request *jsonrpc.Request) *jsonrpc.R
 		"id":     request.ID,
 	})
 
-	logger.Debug("Routing JSON-RPC request")
+	logger.Info("Routing request")
 
 	// 查找处理器
 	handler, found := r.getHandler(request.Method)
@@ -139,7 +139,9 @@ func (r *Router) RouteBatch(ctx context.Context, requests []jsonrpc.Request) []*
 		}
 	}
 
-	r.logger.WithField("count", len(requests)).Debug("Routing batch JSON-RPC requests")
+	r.logger.WithFields(logrus.Fields{
+		"count": len(requests),
+	}).Info("Routing batch requests")
 
 	// 处理批量请求
 	responses := make([]*jsonrpc.Response, len(requests))
@@ -148,7 +150,10 @@ func (r *Router) RouteBatch(ctx context.Context, requests []jsonrpc.Request) []*
 		responses[i] = r.Route(ctx, &request)
 	}
 
-	r.logger.WithField("count", len(responses)).Debug("Batch routing completed")
+	r.logger.WithFields(logrus.Fields{
+		"request_count":  len(requests),
+		"response_count": len(responses),
+	}).Info("Batch routing completed")
 	return responses
 }
 

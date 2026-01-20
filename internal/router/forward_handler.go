@@ -51,7 +51,7 @@ func (h *ForwardHandler) Handle(ctx context.Context, request *jsonrpc.Request) (
 
 // handleEthAccounts 处理 eth_accounts 方法
 func (h *ForwardHandler) handleEthAccounts(ctx context.Context, request *jsonrpc.Request) (*jsonrpc.Response, error) {
-	h.logger.Debug("Handling eth_accounts request - returning empty array")
+	h.logger.Info("Returning empty accounts array")
 
 	// 返回空数组（web3signer 不管理账户）
 	emptyAccounts := []string{}
@@ -65,7 +65,7 @@ func (h *ForwardHandler) forwardToDownstream(ctx context.Context, request *jsonr
 		"id":     request.ID,
 	})
 
-	logger.Debug("Forwarding request to downstream service")
+	logger.Info("Forwarding to downstream")
 
 	// 使用下游客户端转发请求
 	response, err := h.client.ForwardRequest(ctx, request)
@@ -74,7 +74,7 @@ func (h *ForwardHandler) forwardToDownstream(ctx context.Context, request *jsonr
 		return nil, fmt.Errorf("downstream service error: %v", err)
 	}
 
-	logger.Debug("Request forwarded successfully")
+	logger.Info("Request forwarded successfully")
 	return response, nil
 }
 
