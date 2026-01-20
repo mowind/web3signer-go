@@ -104,7 +104,9 @@ func (h *SignHandler) handleEthSign(ctx context.Context, request *internaljsonrp
 
 	signature := hex.EncodeToString(signatureHex)
 
-	h.logger.Info("Data signed successfully")
+	h.logger.WithFields(logrus.Fields{
+		"address": h.signer.Address().String(),
+	}).Info("Data signed successfully")
 	return h.CreateSuccessResponse(request.ID, signature)
 }
 
@@ -143,7 +145,10 @@ func (h *SignHandler) handleEthSignTransaction(ctx context.Context, request *int
 			"Failed to sign transaction", err.Error()), nil
 	}
 
-	h.logger.Info("Transaction signed successfully")
+	h.logger.WithFields(logrus.Fields{
+		"from": txParams.From,
+		"to":   txParams.To,
+	}).Info("Transaction signed successfully")
 	return h.CreateSuccessResponse(request.ID, signedTx)
 }
 
@@ -287,7 +292,10 @@ func (h *SignHandler) handleEthSendTransaction(ctx context.Context, request *int
 			forwardResponse.Error.Message, forwardResponse.Error.Data), nil
 	}
 
-	h.logger.Info("Transaction sent successfully")
+	h.logger.WithFields(logrus.Fields{
+		"from": txParams.From,
+		"to":   txParams.To,
+	}).Info("Transaction sent successfully")
 	forwardResponse.ID = request.ID
 	forwardResponse.JSONRPC = internaljsonrpc.JSONRPCVersion
 	return forwardResponse, nil
