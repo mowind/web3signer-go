@@ -11,14 +11,14 @@ import (
 // BaseHandler 提供处理器的基础功能
 type BaseHandler struct {
 	method string
-	logger *logrus.Logger
+	logger *logrus.Entry
 }
 
 // NewBaseHandler 创建基础处理器
 func NewBaseHandler(method string, logger *logrus.Logger) *BaseHandler {
 	return &BaseHandler{
 		method: method,
-		logger: logger,
+		logger: logger.WithField("component", "base_handler"),
 	}
 }
 
@@ -94,7 +94,7 @@ func (h *BaseHandler) LogRequest(request *jsonrpc.Request) {
 	}
 
 	// Debug 级别记录完整的 params（生产环境不记录）
-	if h.logger.IsLevelEnabled(logrus.DebugLevel) {
+	if h.logger.Logger.IsLevelEnabled(logrus.DebugLevel) {
 		fields["params"] = string(request.Params)
 	}
 
@@ -119,7 +119,7 @@ func (h *BaseHandler) LogResponse(request *jsonrpc.Request, response *jsonrpc.Re
 	default:
 		// 成功时记录 Info，让生产环境可见
 		// Debug 级别记录完整的 result
-		if h.logger.IsLevelEnabled(logrus.DebugLevel) && response.Result != nil {
+		if h.logger.Logger.IsLevelEnabled(logrus.DebugLevel) && response.Result != nil {
 			fields["result"] = string(response.Result)
 		}
 		h.logger.WithFields(fields).Info("Request completed")

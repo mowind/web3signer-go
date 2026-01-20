@@ -11,22 +11,22 @@ import (
 
 // RouterFactory 路由器工厂，简化路由器的创建和配置
 type RouterFactory struct {
-	logger *logrus.Logger
+	logger *logrus.Entry
 }
 
 // NewRouterFactory 创建路由器工厂
 func NewRouterFactory(logger *logrus.Logger) *RouterFactory {
 	return &RouterFactory{
-		logger: logger,
+		logger: logger.WithField("component", "router_factory"),
 	}
 }
 
 // CreateRouter 创建完整配置的路由器
 func (f *RouterFactory) CreateRouter(mpcSigner *signer.MPCKMSSigner, downstreamClient downstream.ClientInterface) *Router {
-	router := NewRouter(f.logger)
+	router := NewRouter(f.logger.Logger)
 
 	// 注册签名处理器
-	signHandler, err := NewSignHandler(mpcSigner, downstreamClient, downstreamClient.GetEndpoint(), f.logger)
+	signHandler, err := NewSignHandler(mpcSigner, downstreamClient, downstreamClient.GetEndpoint(), f.logger.Logger)
 	if err != nil {
 		f.logger.WithError(err).Fatal("Failed to create sign handler")
 	}
@@ -62,7 +62,7 @@ func (f *RouterFactory) CreateRouter(mpcSigner *signer.MPCKMSSigner, downstreamC
 	}
 
 	// 注册转发处理器（处理所有其他方法）
-	forwardHandler := NewForwardHandler(downstreamClient, f.logger)
+	forwardHandler := NewForwardHandler(downstreamClient, f.logger.Logger)
 	router.SetDefaultHandler(&MethodHandler{
 		handler: forwardHandler,
 		method:  "forward_handler", // 这个会处理所有非签名方法
@@ -89,5 +89,5 @@ func (m *MethodHandler) Handle(ctx context.Context, request *jsonrpc.Request) (*
 
 // CreateSimpleRouter 创建简化的路由器（用于测试）
 func (f *RouterFactory) CreateSimpleRouter() *Router {
-	return NewRouter(f.logger)
+	return NewRouter(f.logger.Logger)
 }
