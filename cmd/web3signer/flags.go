@@ -97,6 +97,12 @@ var flags = []Flag{
 		Description:  "Log level (debug, info, warn, error, fatal)",
 		BindTo:       "log.level",
 	},
+	{
+		Name:         "log-format",
+		DefaultValue: config.DefaultLogFormat,
+		Description:  "Log format (json or text)",
+		BindTo:       "log.format",
+	},
 }
 
 // registerFlags 注册所有命令行标志

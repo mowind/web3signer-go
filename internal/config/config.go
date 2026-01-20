@@ -124,14 +124,25 @@ func hasPort(urlStr string) bool {
 
 // LogConfig 定义日志配置
 type LogConfig struct {
-	Level string `mapstructure:"level"`
+	Level  string `mapstructure:"level"`  // 日志级别
+	Format string `mapstructure:"format"` // 日志格式 (json/text)
 }
 
 // Validate 验证日志配置
 func (c *LogConfig) Validate() error {
+	// 验证级别
 	if !validLogLevels[strings.ToLower(c.Level)] {
 		return fmt.Errorf("log-level must be one of: debug, info, warn, error, fatal, got: %s", c.Level)
 	}
+
+	// 验证格式
+	if c.Format == "" {
+		c.Format = DefaultLogFormat // 默认 text
+	}
+	if !validLogFormats[strings.ToLower(c.Format)] {
+		return fmt.Errorf("log-format must be one of: json, text, got: %s", c.Format)
+	}
+
 	return nil
 }
 
@@ -159,10 +170,10 @@ func (c *Config) String() string {
 		"HTTP: {Host: %s, Port: %d}, "+
 			"KMS: {Endpoint: %s, KeyID: %s, AccessKeyID: [REDACTED], SecretKey: [REDACTED]}, "+
 			"Downstream: {Host: %s, Port: %d, Path: %s}, "+
-			"Log: {Level: %s}",
+			"Log: {Level: %s, Format: %s}",
 		c.HTTP.Host, c.HTTP.Port,
 		c.KMS.Endpoint, c.KMS.KeyID,
 		c.Downstream.HTTPHost, c.Downstream.HTTPPort, c.Downstream.HTTPPath,
-		c.Log.Level,
+		c.Log.Level, c.Log.Format,
 	)
 }

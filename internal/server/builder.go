@@ -1,9 +1,11 @@
 package server
 
 import (
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	ginlogrus "github.com/toorop/gin-logrus"
 	"github.com/mowind/web3signer-go/internal/config"
 	"github.com/mowind/web3signer-go/internal/downstream"
 	"github.com/mowind/web3signer-go/internal/kms"
@@ -77,12 +79,13 @@ func (b *Builder) setGinMode() {
 // createGinRouter 创建 gin 路由器
 func (b *Builder) createGinRouter(jsonRPCRouter *router.Router, logger *logrus.Logger) *gin.Engine {
 	router := gin.New()
+
+	// 使用 logrus 替代 gin 的默认 logger
+	router.Use(ginlogrus.Logger(logger))
 	router.Use(gin.Recovery())
 	router.Use(b.corsMiddleware())
 
-	if b.cfg.Log.Level == config.LogLevelDebug {
-		router.Use(gin.Logger())
-	}
+	// 移除原来的条件判断（Gin 日志现在通过 logrus 统一输出）
 
 	// JSON-RPC端点，路由到jsonRPCRouter
 	router.POST("/", b.handleJSONRPCRequest(jsonRPCRouter))
@@ -101,8 +104,40 @@ func (b *Builder) createGinRouter(jsonRPCRouter *router.Router, logger *logrus.L
 func (b *Builder) createLogger() *logrus.Logger {
 	logger := logrus.New()
 	logger.SetLevel(getLogLevel(b.cfg.Log.Level))
-	logger.SetFormatter(&logrus.JSONFormatter{})
+
+	// 根据配置设置格式（替换硬编码的 JSONFormatter）
+	logger.SetFormatter(b.createLogFormatter())
+
 	return logger
+}
+
+// createLogFormatter 创建日志格式化器
+func (b *Builder) createLogFormatter() logrus.Formatter {
+	switch strings.ToLower(b.cfg.Log.Format) {
+	case config.LogFormatJSON:
+		return &logrus.JSONFormatter{
+			TimestampFormat: "2006-01-02T15:04:05Z07:00",
+		}
+	case config.LogFormatText:
+		return &logrus.TextFormatter{
+			TimestampFormat: "2006-01-02 15:04:05",
+			FullTimestamp:   true,
+			ForceColors:     b.isTerminal(),
+		}
+	default:
+		// 默认使用 text
+		return &logrus.TextFormatter{
+			TimestampFormat: "2006-01-02 15:04:05",
+			FullTimestamp:   true,
+		}
+	}
+}
+
+// isTerminal 检查输出是否为终端
+func (b *Builder) isTerminal() bool {
+	// 简化判断：如果格式是 text 且级别是 debug，启用颜色
+	return b.cfg.Log.Format == config.LogFormatText &&
+		b.cfg.Log.Level == config.LogLevelDebug
 }
 
 // healthHandler 处理健康检查请求
