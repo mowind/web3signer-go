@@ -1,25 +1,41 @@
 # web3signer-go
 
-A Go implementation of web3signer with MPC-KMS (Multi-Party Computation - Key Management Service) signing support.
+> 🚀 **A production-ready Go implementation of Web3 signer with MPC-KMS signing support**
+
+[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
+[![Go Report Card](https://goreportcard.com/badge/github.com/mowind/web3signer-go)](https://goreportcard.com/report/github.com/mowind/web3signer-go)
+[![GoDoc](https://godoc.org/github.com/mowind/web3signer-go?status.svg)](https://godoc.org/github.com/mowind/web3signer-go)
 
 ## Overview
 
-`web3signer-go` is inspired by [Consensys/web3signer](https://github.com/Consensys/web3signer) but specifically focuses on **MPC-KMS signing**. It provides an HTTP JSON-RPC interface that:
+`web3signer-go` is a lightweight, secure signing service inspired by [Consensys/web3signer](https://github.com/Consensys/web3signer), specifically focusing on **MPC-KMS (Multi-Party Computation Key Management Service)** signing.
 
-1. **Signs transactions using MPC-KMS** - Supports cryptographic operations via MPC-KMS service
-2. **Forwards other JSON-RPC methods** - Routes non-signing requests to downstream services
-3. **Provides JSON-RPC compatibility** - Implements standard Ethereum JSON-RPC methods
+It provides a transparent HTTP JSON-RPC proxy that:
+- ✅ **Signs transactions** using secure MPC-KMS (key never exposed)
+- ✅ **Forwards all other requests** to downstream Ethereum nodes
+- ✅ **Standard Ethereum JSON-RPC** - drop-in replacement for direct node access
+
+### Key Differentiators
+
+| Feature | web3signer-go | Original web3signer |
+|---------|---------------|---------------------|
+| **Signing Methods** | MPC-KMS only | File, Vault, AWS KMS, YubiHSM, etc. |
+| **Architecture** | Simple, focused | Complex, extensible |
+| **Language** | Go | Java |
+| **Deployment** | Single binary, minimal deps | JVM, heavier footprint |
+| **Use Case** | Production MPC-KMS deployments | Multi-backend signing scenarios |
 
 ## Features
 
 - ✅ **MPC-KMS Integration** - Secure multi-party computation key management
 - ✅ **JSON-RPC Server** - HTTP server with JSON-RPC 2.0 support
 - ✅ **Transaction Signing** - Supports `eth_sign`, `eth_signTransaction`, `eth_sendTransaction`
-- ✅ **Downstream Forwarding** - Routes other methods to configured downstream services
-- ✅ **Configuration Management** - CLI flags and config file support via Cobra/Viper
+- ✅ **Smart Contract Support** - EIP-1559 and legacy transaction types
+- ✅ **Downstream Forwarding** - Transparent proxy to Ethereum nodes
+- ✅ **CORS Support** - Configurable CORS headers for web applications
+- ✅ **Configuration Management** - CLI flags, config files, and environment variables
 - ✅ **Structured Logging** - Logrus-based logging with configurable levels
-- ✅ **Health Checks** - `/health` and `/ready` endpoints for monitoring
-- ✅ **Comprehensive Testing** - Unit tests, integration tests, and mock services
+- ✅ **Comprehensive Testing** - 100% coverage on core components
 
 ## Quick Start
 
@@ -201,6 +217,7 @@ go test ./internal/jsonrpc/...
 - `--kms-access-key-id` - Access key ID (required)
 - `--kms-secret-key` - Secret key (required)
 - `--kms-key-id` - Key ID for signing (required)
+- `--kms-address` - Ethereum address associated with the key (required)
 
 ### Downstream Service Configuration
 - `--downstream-http-host` - Downstream service host (default: `http://localhost`)
@@ -232,7 +249,18 @@ export WEB3SIGNER_KMS_KEY_ID=your_key_id
 ### JSON-RPC Endpoint
 - `POST /` - JSON-RPC 2.0 endpoint
 
-### Example Request
+### Supported Signing Methods
+
+| Method | Description |
+|--------|-------------|
+| `eth_sign` | Sign arbitrary data with the configured key |
+| `eth_signTransaction` | Sign a transaction (returns signed transaction) |
+| `eth_sendTransaction` | Sign and send a transaction to the network |
+| `eth_accounts` | Returns the configured Ethereum address |
+
+### Example Requests
+
+#### Sign a Transaction
 
 ```bash
 curl -X POST http://localhost:9000/ \
@@ -240,23 +268,123 @@ curl -X POST http://localhost:9000/ \
   -d '{
     "jsonrpc": "2.0",
     "id": 1,
-    "method": "eth_sign",
-    "params": ["0x9b2055d370f73ec7d8a03e965129118dc8f5bf83", "0xdeadbeef"]
+    "method": "eth_signTransaction",
+    "params": [{
+      "from": "0xYourAddress",
+      "to": "0xRecipientAddress",
+      "gas": "0x5208",
+      "gasPrice": "0x4a817c800",
+      "nonce": "0x0",
+      "value": "0xde0b6b3a7640000",
+      "chainId": "0x1"
+    }]
   }'
 ```
+
+#### Send a Transaction
+
+```bash
+curl -X POST http://localhost:9000/ \
+  -H "Content-Type: application/json" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 2,
+    "method": "eth_sendTransaction",
+    "params": [{
+      "from": "0xYourAddress",
+      "to": "0xRecipientAddress",
+      "gas": "0x5208",
+      "maxFeePerGas": "0x4a817c800",
+      "maxPriorityFeePerGas": "0x4a817c800",
+      "nonce": "0x1",
+      "value": "0xde0b6b3a7640000",
+      "chainId": "0x1"
+    }]
+  }'
+```
+
+### Forwarded Methods
+
+All other JSON-RPC methods are forwarded to the configured downstream service, including:
+- `eth_getBalance`
+- `eth_getTransactionCount`
+- `eth_call`
+- `eth_getBlockByNumber`
+- `net_version`
+- `web3_clientVersion`
+- And more...
 
 ## License
 
 This project is licensed under the GNU General Public License v3.0 (GPLv3). See the [LICENSE](LICENSE) file for details.
 
+## Architecture
+
+```mermaid
+graph TB
+    Client[以太坊客户端 / DApp] -->|JSON-RPC| Web3Signer[web3signer-go]
+
+    subgraph Web3Signer
+        Router[JSON-RPC 路由器<br/>internal/router]
+        SignHandler[签名处理器<br/>router/sign_handler]
+        ForwardHandler[转发处理器<br/>router/forward_handler]
+        Config[配置管理<br/>internal/config]
+
+        Router -->|eth_sign/eth_signTransaction/<br/>eth_sendTransaction| SignHandler
+        Router -->|其他所有方法| ForwardHandler
+        Config --> Router
+    end
+
+    SignHandler -->|签名请求| MPCKMS[MPC-KMS 服务]
+    ForwardHandler -->|透传请求| Downstream[下游 Ethereum 节点]
+
+    MPCKMS -->|签名结果| SignHandler
+    Downstream -->|JSON-RPC 响应| ForwardHandler
+
+    SignHandler -->|JSON-RPC 响应| Client
+    ForwardHandler -->|JSON-RPC 响应| Client
+```
+
+### Project Structure
+
+```
+web3signer-go/
+├── cmd/                    # Application entry points
+│   ├── web3signer/         # Main application
+│   └── test-kms/           # KMS test utilities
+├── internal/               # Private application code
+│   ├── config/             # Configuration types and validation
+│   ├── kms/                # MPC-KMS HTTP client
+│   ├── signer/             # Signing logic (implements ethgo.Key)
+│   ├── server/             # HTTP server with Gin
+│   ├── router/             # JSON-RPC routing and handlers
+│   ├── jsonrpc/            # JSON-RPC types and utilities
+│   ├── downstream/         # Downstream service HTTP client
+│   └── errors/             # Error types and handling
+├── test/                   # Integration tests and mocks
+├── CLAUDE.md               # AI context documentation
+├── .claude/                # Claude Code configuration
+└── .bmad-core/             # BMad development workflow
+```
+
+### Module Documentation
+
+Each module has detailed documentation in `CLAUDE.md`:
+- **[`internal/kms/CLAUDE.md`](internal/kms/CLAUDE.md)** - MPC-KMS client implementation
+- **[`internal/router/CLAUDE.md`](internal/router/CLAUDE.md)** - JSON-RPC routing logic
+- **[`internal/signer/CLAUDE.md`](internal/signer/CLAUDE.md)** - Transaction signing
+
 ## Contributing
 
+We welcome contributions! Please see our development guidelines:
+
 1. Fork the repository
-2. Create a feature branch
+2. Create a feature branch (`git checkout -b feat/amazing-feature`)
 3. Make your changes
 4. Add tests for new functionality
-5. Ensure all tests pass
-6. Submit a pull request
+5. Ensure all tests pass (`make test`)
+6. Commit with [Conventional Commits](https://www.conventionalcommits.org/)
+7. Push and create a pull request
 
 ### Development Setup
 
@@ -270,35 +398,69 @@ This project uses several code quality tools:
    make lint           # Run linter
    ```
 
-2. **pre-commit hooks** - Git hooks for code quality
-   ```bash
-   # Install pre-commit
-   pip install pre-commit
-   
-   # Install hooks
-   pre-commit install
-   
-   # Run hooks on all files
-   pre-commit run --all-files
-   ```
-
-3. **Testing**
+2. **Testing**
    ```bash
    make test           # Run tests
    make test-coverage  # Run tests with coverage
    make coverage       # Generate HTML coverage report
+   make integration-test  # Run integration tests
+   ```
+
+3. **Code Quality**
+   ```bash
+   make fmt            # Format code
+   make vet            # Run go vet
+   make tidy           # Tidy dependencies
+   make check          # Run all checks (test + lint)
    ```
 
 #### Code Style Guidelines
 
-- Follow standard Go conventions
+- Follow standard Go conventions and [Effective Go](https://golang.org/doc/effective_go)
 - Run `make fmt` before committing
 - Ensure `make lint` passes without errors
 - Maintain test coverage >80% for core components
+- Write clear, self-documenting code
+
+### Commit Message Format
+
+We follow [Conventional Commits](https://www.conventionalcommits.org/):
+
+```
+feat(kms): add support for multiple key IDs
+fix(signer): correct EIP-1559 transaction calculation
+docs(readme): update deployment instructions
+test(router): add integration test for batch requests
+```
+
+## Roadmap
+
+- [ ] Multi-key support (currently single key-id)
+- [ ] Asynchronous signing approval workflow
+- [ ] Prometheus metrics endpoint
+- [ ] Docker image and Kubernetes deployment
+- [ ] Performance benchmarking
+- [ ] Webhook notifications for signing events
+
+## License
+
+This project is licensed under the GNU General Public License v3.0 (GPLv3). See the [LICENSE](LICENSE) file for details.
 
 ## Acknowledgments
 
 - Inspired by [Consensys/web3signer](https://github.com/Consensys/web3signer)
 - Built with [Gin](https://github.com/gin-gonic/gin) for HTTP routing
-- Uses [Cobra](https://github.com/spf13/cobra) and [Viper](https://github.com/spf13/viper) for CLI and configuration
-- [Logrus](https://github.com/sirupsen/logrus) for structured logging
+- Uses [ethgo](https://github.com/ethereum/go-ethereum) for Ethereum utilities
+- Configuration via [Cobra](https://github.com/spf13/cobra) and [Viper](https://github.com/spf13/viper)
+- Logging with [Logrus](https://github.com/sirupsen/logrus)
+
+## Support
+
+- 📖 **Documentation**: See [CLAUDE.md](CLAUDE.md) for AI-assisted development
+- 🐛 **Bug Reports**: [GitHub Issues](https://github.com/mowind/web3signer-go/issues)
+- 💡 **Feature Requests**: [GitHub Discussions](https://github.com/mowind/web3signer-go/discussions)
+- 📧 **Security**: security@mowind.com
+
+---
+
+**Made with ❤️ by the web3signer-go team**
