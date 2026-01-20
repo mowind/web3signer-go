@@ -11,12 +11,14 @@ import (
 
 	"github.com/mowind/web3signer-go/internal/config"
 	"github.com/mowind/web3signer-go/internal/jsonrpc"
+	"github.com/sirupsen/logrus"
 )
 
 // Client 表示下游服务客户端
 type Client struct {
 	config     *config.DownstreamConfig
 	httpClient *http.Client
+	logger     *logrus.Logger
 }
 
 // NewClient 创建新的下游服务客户端
@@ -27,6 +29,7 @@ func NewClient(cfg *config.DownstreamConfig) *Client {
 			Timeout:   30 * time.Second,
 			Transport: createTransport(),
 		},
+		logger: logrus.StandardLogger(),
 	}
 }
 
@@ -91,9 +94,11 @@ func (c *Client) ForwardRequest(ctx context.Context, req *jsonrpc.Request) (*jso
 	if req.ID != nil && jsonResp.ID != nil {
 		// 尝试比较ID值
 		if !compareIDs(req.ID, jsonResp.ID) {
-			// 记录ID不匹配，但继续使用响应中的ID
-			// 在实际生产环境中可能需要记录警告
-			_ = fmt.Sprintf("ID mismatch: request ID %v, response ID %v", req.ID, jsonResp.ID)
+			// 记录ID不匹配警告
+			c.logger.WithFields(logrus.Fields{
+				"request_id":  req.ID,
+				"response_id": jsonResp.ID,
+			}).Warn("JSON-RPC ID mismatch in response")
 		}
 	} else if req.ID != nil {
 		// 如果请求有ID但响应没有，设置响应ID
@@ -165,9 +170,12 @@ func (c *Client) ForwardBatchRequest(ctx context.Context, requests []jsonrpc.Req
 	for i := range jsonResponses {
 		if requests[i].ID != nil && jsonResponses[i].ID != nil {
 			if !compareIDs(requests[i].ID, jsonResponses[i].ID) {
-				// 记录ID不匹配，但继续使用响应中的ID
-				// 在实际生产环境中可能需要记录警告
-				_ = fmt.Sprintf("Batch ID mismatch[%d]: request ID %v, response ID %v", i, requests[i].ID, jsonResponses[i].ID)
+				// 记录ID不匹配警告
+				c.logger.WithFields(logrus.Fields{
+					"index":       i,
+					"request_id":  requests[i].ID,
+					"response_id": jsonResponses[i].ID,
+				}).Warn("JSON-RPC ID mismatch in batch response")
 			}
 		} else if requests[i].ID != nil {
 			// 如果请求有ID但响应没有，设置响应ID
@@ -190,10 +198,24 @@ func compareIDs(id1, id2 interface{}) bool {
 		return false
 	}
 
-	// 尝试转换为字符串比较
-	str1 := fmt.Sprintf("%v", id1)
-	str2 := fmt.Sprintf("%v", id2)
-	return str1 == str2
+	// 快速路径:相同类型直接比较
+	switch v1 := id1.(type) {
+	case string:
+		if v2, ok := id2.(string); ok {
+			return v1 == v2
+		}
+	case int:
+		if v2, ok := id2.(int); ok {
+			return v1 == v2
+		}
+	case float64:
+		if v2, ok := id2.(float64); ok {
+			return v1 == v2
+		}
+	}
+
+	// 降级到字符串比较(兼容不同类型)
+	return fmt.Sprintf("%v", id1) == fmt.Sprintf("%v", id2)
 }
 
 // TestConnection 测试下游服务连接
