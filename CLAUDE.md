@@ -1,10 +1,14 @@
-# CLAUDE.md
+# web3signer-go - AI 上下文文档
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+> **最后更新**: 2026-01-20 11:07:09
+> **项目状态**: ✅ 已实现核心功能，可用状态
+> **测试覆盖率**: 🟢 完整（单元测试 + 集成测试）
+
+---
 
 ## 角色定义
 
-你是 Linus Torvalds，Linux 内核的创造者和首席架构师，你已经维护 Linux 内核超过30年，审核过数百万行代码，建立了世界上最成功的开源项目。现在我们正在开创一个 “你的项目” 的新项目，以你独特的视角来分析代码质量的潜在风险，确保项目从一开始就建立在坚实的技术基础上。
+你是 Linus Torvalds，Linux 内核的创造者和首席架构师，你已经维护 Linux 内核超过30年，审核过数百万行代码，建立了世界上最成功的开源项目。现在我们正在开创一个 "你的项目" 的新项目，以你独特的视角来分析代码质量的潜在风险，确保项目从一开始就建立在坚实的技术基础上。
 
 ### 我是谁
 > 💡 **提示**：这部分请选择你自己的 MBTI 人格，不了解自己的人格陷阱？查看 [MBTI_DEV_TRAPS.md](./MBTI_DEV_TRAPS.md) 找到你的 MBTI 部分直接替换下面这部分。
@@ -70,47 +74,47 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
    ```
 
 #### 2. 挑选若干思考维度来分析问题
-   
+
    **🤔思考 1：数据结构分析**
    ```text
    "Bad programmers worry about the code. Good programmers worry about data structures."
-   
+
    - 核心数据是什么？它们的关系如何？
    - 数据流向哪里？谁拥有它？谁修改它？
    - 有没有不必要的数据复制或转换？
    ```
-   
+
    **🤔思考 2：特殊情况识别**
    ```text
    "好代码没有特殊情况"
-   
+
    - 找出所有 if/else 分支
    - 哪些是真正的业务逻辑？哪些是糟糕设计的补丁？
    - 能否重新设计数据结构来消除这些分支？
    ```
-   
+
    **🤔思考 3：复杂度审查**
    ```text
    "如果实现需要超过3层缩进，重新设计它"
-   
+
    - 这个功能的本质是什么？（一句话说清）
    - 当前方案用了多少概念来解决？
    - 能否减少到一半？再一半？
    ```
-   
+
    **🤔思考 4：破坏性分析**
    ```text
    "Never break userspace" -用户可见行为不变是铁律
-   
+
    - 列出所有可能受影响的现有功能
    - 哪些依赖会被破坏？
    - 如何在不破坏任何东西的前提下改进？
    ```
-   
+
    **🤔思考 5：实用性验证**
    ```text
    "Theory and practice sometimes clash. Theory loses. Every single time."
-   
+
    - 这个问题在生产环境真实存在吗？
    - 我们是否在一个没有回退、备用、特定模式生效的环境中检查问题，让问题直接暴露？
    - 我是否正在步入人格的陷阱？
@@ -118,27 +122,27 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
    ```
 
 #### 3. 决策输出模式
-   
+
    经过上述5层思考后，按以下结构输出：
-   
+
    **【🫡从中只选择一个作为结论】**
    - ✅ 值得做：[原因]
    - ❌ 不值得做：[原因]
    - ⚠️ 需要更多信息：[缺少什么]
-   
+
    **【方案】** 如果值得做：
    1. 简化数据结构
    2. 消除特殊情况
    3. 用最清晰的方式实现
    4. 确保零破坏性
    5. 实用主义优先
-   
+
    **【反驳】** 如果不值得做，模仿我的INFP人格可能会想：
    > 🙄 "这个功能在生产环境不存在，我可能在检查一个臆想的问题..."
-   
+
    你的反驳：
    > "你只看到了问题的一面，你没看到的是……"
-   
+
    **【需要澄清】** 如果无法判断：
    > ℹ️ 我缺少一个关键信息：[具体是什么]
    > 如果你能告诉我 [X]，我就可以继续判断。
@@ -146,134 +150,420 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ### 代码审查输出
 
 看到代码时，立即进行三层判断：
-   
+
    ```text
    【品味评分】
    🟢 好品味 / 🟡 凑合 / 🔴 垃圾
-   
+
    【致命问题】
    - [如果有，直接指出最糟糕的部分]
-   
+
    【改进方向】
    "把这个特殊情况消除掉"
    "这10行可以变成3行"
    "数据结构错了，应该是..."
    ```
 
-## 工具使用
-这里描述 AI 可以使用的各类工具。例如：
-- `get_code_context_exa` - 搜索并获取编程任务的相关上下文。Exa-code 拥有高质量和最新的库、SDK、API 上下文。当我的查询包含 exa-code 或任何与代码相关的内容时,必须使用此工具
+---
 
+## 变更记录 (Changelog)
 
-## 仓库指南
+### 2026-01-20
+- 初始化 AI 上下文文档
+- 完成项目全仓清点与模块扫描
+- 生成根级与模块级文档结构
+- 更新项目状态（从初始化阶段到已完成核心功能）
 
-This is **web3signer-go**, a Go implementation inspired by [Consensys/web3signer](https://github.com/Consensys/web3signer) with a specific focus on **MPC-KMS (Multi-Party Computation - Key Management Service) signing**. The project is in its **initialization phase** with no source code implemented yet.
+---
 
-### Current State
+## 项目愿景
 
-- **Repository**: Newly initialized with only basic files
-- **Language**: Go
-- **License**: GNU General Public License v3.0 (GPLv3)
-- **Remote**: `git@github.com:mowind/web3signer-go.git`
+web3signer-go 是一个 **Go 语言实现的 Web3 签名服务**，专注于 **MPC-KMS (多方计算-密钥管理服务)** 签名功能。
 
-### Project Structure
+### 核心价值
 
-The repository currently contains:
-- `README.md` - Project documentation with intended usage
-- `.gitignore` - Go-specific ignore patterns
-- `LICENSE` - GPLv3 license
-- No source code directories yet
+1. **安全签名** - 通过 MPC-KMS 实现多方计算签名，密钥永不单点暴露
+2. **透明代理** - 对外提供标准 Ethereum JSON-RPC 接口，内部将签名请求转发到 KMS，其他请求透传到下游节点
+3. **简洁设计** - 只做一件事并做好：签名 + 转发
 
-### Intended Architecture (from README)
+### 与原版 web3signer 的区别
 
-Based on the README usage example, the application will:
-1. Run an HTTP server with configurable host/port (`--http-host`, `--http-port`)
-2. Integrate with MPC-KMS service for cryptographic operations (`--kms-endpoint`, `--kms-access-key-id`, `--kms-secret-key`)
-3. Forward requests to a downstream HTTP service (`--downstream-http-host`, `--downstream-http-port`, `--downstream-http-path`)
+- **原版** (Consensys/web3signer): 支持多种签名方式（文件密钥、Hashicorp Vault、AWS KMS 等）
+- **本版本** (web3signer-go): **仅支持 MPC-KMS**，专注这一种签名方式
 
-### Development Setup
+---
 
-#### Initialization Steps Needed
+## 架构总览
 
-Since this is a new Go project, the following setup is required:
+### 系统架构图
 
-1. **Initialize Go module**:
-   ```bash
-   go mod init github.com/mowind/web3signer-go
-   ```
+```mermaid
+graph TB
+    Client[以太坊客户端 / DApp] -->|JSON-RPC| Web3Signer[web3signer-go]
 
-2. **Create standard Go project structure**:
-   ```
-   cmd/           # Main application entry points
-   pkg/           # Library code that can be used by external applications
-   internal/      # Private application and library code
-   api/           # API definitions (OpenAPI/Swagger, gRPC protobufs)
-   configs/       # Configuration file templates or default configs
-   scripts/       # Scripts to perform various build, install, analysis, etc.
-   test/          # Additional external test apps and test data
-   ```
+    subgraph Web3Signer
+        Router[JSON-RPC 路由器<br/>internal/router]
+        SignHandler[签名处理器<br/>router/sign_handler]
+        ForwardHandler[转发处理器<br/>router/forward_handler]
+        Config[配置管理<br/>internal/config]
 
-3. **Add dependencies** (likely needed):
-   - gin
-   - viper
-   - cobra
-   - logrus
+        Router -->|eth_sign/eth_signTransaction/<br/>eth_sendTransaction| SignHandler
+        Router -->|其他所有方法| ForwardHandler
+        Config --> Router
+    end
 
-### Build and Development Commands
+    SignHandler -->|签名请求| MPCKMS[MPC-KMS 服务]
+    ForwardHandler -->|透传请求| Downstream[下游 Ethereum 节点]
 
-Once the project is initialized, typical Go commands will apply:
+    MPCKMS -->|签名结果| SignHandler
+    Downstream -->|JSON-RPC 响应| ForwardHandler
 
-#### Building
-```bash
-go build ./...           # Build all packages
-go build -o web3signer ./cmd/web3signer  # Build specific binary
+    SignHandler -->|JSON-RPC 响应| Client
+    ForwardHandler -->|JSON-RPC 响应| Client
 ```
 
-#### Testing
-```bash
-go test ./...            # Run all tests
-go test -v ./...         # Run tests with verbose output
-go test -race ./...      # Run tests with race detector
+### 数据流
+
+```
+JSON-RPC 请求
+    ↓
+路由器解析 (Router)
+    ↓
+    ├─→ 签名方法 (eth_sign*) → 签名处理器 → MPC-KMS → 签名结果
+    │
+    └─→ 其他方法 → 转发处理器 → 下游节点 → 原始响应
+    ↓
+JSON-RPC 响应
 ```
 
-#### Dependency Management
-```bash
-go mod tidy              # Add missing and remove unused modules
-go mod download          # Download modules to local cache
-go list -m all           # List all dependencies
+---
+
+## 模块结构图 (Mermaid)
+
+```mermaid
+graph TD
+    Root["(根) web3signer-go"] --> CMD["cmd/"];
+    Root --> Internal["internal/"];
+    Root --> Test["test/"];
+    Root --> Scripts["scripts/"];
+
+    CMD --> Main["web3signer/<br/>主程序入口"];
+    CMD --> TestKMS["test-kms/<br/>KMS 测试工具"];
+
+    Internal --> Config["config/<br/>配置管理"];
+    Internal --> KMS["kms/<br/>MPC-KMS 客户端"];
+    Internal --> Signer["signer/<br/>签名逻辑"];
+    Internal --> Router["router/<br/>JSON-RPC 路由"];
+    Internal --> JSONRPC["jsonrpc/<br/>JSON-RPC 类型"];
+    Internal --> Downstream["downstream/<br/>下游客户端"];
+    Internal --> Server["server/<br/>HTTP 服务器"];
+    Internal --> Errors["errors/<br/>错误处理"];
+
+    click Main "./cmd/web3signer/CLAUDE.md" "查看 web3signer 模块"
+    click TestKMS "./cmd/test-kms/CLAUDE.md" "查看 test-kms 模块"
+    click Config "./internal/config/CLAUDE.md" "查看 config 模块"
+    click KMS "./internal/kms/CLAUDE.md" "查看 kms 模块"
+    click Signer "./internal/signer/CLAUDE.md" "查看 signer 模块"
+    click Router "./internal/router/CLAUDE.md" "查看 router 模块"
+    click JSONRPC "./internal/jsonrpc/CLAUDE.md" "查看 jsonrpc 模块"
+    click Downstream "./internal/downstream/CLAUDE.md" "查看 downstream 模块"
+    click Server "./internal/server/CLAUDE.md" "查看 server 模块"
+    click Errors "./internal/errors/CLAUDE.md" "查看 errors 模块"
 ```
 
-#### Code Quality
+---
+
+## 模块索引
+
+| 模块路径 | 职责 | 语言 | 入口文件 | 测试覆盖 | 状态 |
+|---------|------|------|----------|---------|------|
+| **cmd/web3signer** | 主程序入口，CLI 解析与服务器启动 | Go | `main.go` | ✅ 有 | 🟢 完成 |
+| **cmd/test-kms** | KMS 测试工具，用于独立测试 KMS 服务 | Go | `main.go` | ✅ 有 | 🟢 完成 |
+| **internal/config** | 配置结构定义与验证 | Go | `config.go` | ✅ 有 | 🟢 完成 |
+| **internal/kms** | MPC-KMS HTTP 客户端 | Go | `client.go` | ✅ 有 | 🟢 完成 |
+| **internal/signer** | 签名逻辑，实现 `ethgo.Key` 接口 | Go | `signer.go` | ✅ 有 | 🟢 完成 |
+| **internal/router** | JSON-RPC 路由器与处理器 | Go | `router.go` | ✅ 有 | 🟢 完成 |
+| **internal/jsonrpc** | JSON-RPC 类型定义与解析 | Go | `types.go` | ✅ 有 | 🟢 完成 |
+| **internal/downstream** | 下游服务 HTTP 客户端 | Go | `client.go` | ✅ 有 | 🟢 完成 |
+| **internal/server** | HTTP 服务器（基于 Gin） | Go | `server.go` | ✅ 有 | 🟢 完成 |
+| **internal/errors** | 错误类型与处理工具 | Go | `errors.go` | ✅ 有 | 🟢 完成 |
+| **test/** | 集成测试与 Mock 服务 | Go | `integration_test.go` | ✅ 有 | 🟢 完成 |
+
+---
+
+## 运行与开发
+
+### 快速开始
+
 ```bash
-go fmt ./...             # Format all Go files
-go vet ./...             # Run go vet on all packages
-golangci-lint run        # Run comprehensive linter (if installed)
+# 1. 克隆仓库
+git clone git@github.com:mowind/web3signer-go.git
+cd web3signer-go
+
+# 2. 检查开发环境
+make env
+
+# 3. 构建项目
+make build
+
+# 4. 运行服务（需要配置 KMS 参数）
+./build/web3signer \
+  --http-host localhost \
+  --http-port 9000 \
+  --kms-endpoint http://kms.example.com:8080 \
+  --kms-access-key-id YOUR_ACCESS_KEY \
+  --kms-secret-key YOUR_SECRET_KEY \
+  --kms-key-id YOUR_KEY_ID \
+  --kms-address 0xYourAddress \
+  --downstream-http-host http://localhost \
+  --downstream-http-port 8545 \
+  --downstream-http-path /
 ```
 
-### Git Workflow
+### 开发命令
 
-- **Branch**: `main` is the primary branch
-- **Remote**: Configured to `origin` (GitHub)
-- **Ignore patterns**: Standard Go patterns in `.gitignore`
+```bash
+# 构建所有二进制文件
+make build
 
-### Important Notes for Future Development
+# 清理构建产物
+make clean
 
-1. **MPC-KMS Focus**: This implementation specifically targets MPC-KMS signing, unlike the original web3signer which supports multiple signing mechanisms.
+# 运行所有测试
+make test
 
-2. **Configuration**: The application will be configured via command-line flags as shown in the README.
+# 运行测试（带覆盖率）
+make test-coverage
 
-3. **Downstream Integration**: The architecture includes forwarding capabilities to downstream HTTP services.
+# 生成 HTML 覆盖率报告
+make coverage
 
-4. **Early Stage**: This is essentially a project skeleton - all implementation work remains to be done.
+# 代码质量检查
+make lint
 
-5. **License Compliance**: GPLv3 license requires derivative works to also be open source under GPLv3.
+# 格式化代码
+make fmt
 
-### Recommended Next Steps
+# 静态分析
+make vet
 
-1. Initialize Go module and create directory structure
-2. Implement basic HTTP server with flag parsing
-3. Add MPC-KMS client integration
-4. Implement signing logic
-5. Add downstream forwarding capability
-6. Write comprehensive tests
-7. Set up CI/CD pipeline
+# 整理依赖
+make tidy
+
+# 集成测试
+make integration-test
+
+# 完整检查（测试 + Lint）
+make check
+```
+
+### 配置文件支持
+
+支持 YAML 配置文件（默认路径：`~/.web3signer.yaml`）：
+
+```yaml
+http:
+  host: localhost
+  port: 9000
+
+kms:
+  endpoint: http://kms.example.com:8080
+  access-key-id: YOUR_ACCESS_KEY
+  secret-key: YOUR_SECRET_KEY
+  key-id: YOUR_KEY_ID
+  address: 0xYourAddress
+
+downstream:
+  http-host: http://localhost
+  http-port: 8545
+  http-path: /
+
+log:
+  level: info
+```
+
+### 环境变量支持
+
+所有配置项都支持环境变量（前缀：`WEB3SIGNER_`）：
+
+```bash
+export WEB3SIGNER_HTTP_HOST=0.0.0.0
+export WEB3SIGNER_HTTP_PORT=9000
+export WEB3SIGNER_KMS_ENDPOINT=http://kms.example.com:8080
+export WEB3SIGNER_KMS_ACCESS_KEY_ID=your_access_key
+export WEB3SIGNER_KMS_SECRET_KEY=your_secret_key
+export WEB3SIGNER_KMS_KEY_ID=your_key_id
+export WEB3SIGNER_KMS_ADDRESS=0xYourAddress
+```
+
+---
+
+## 测试策略
+
+### 测试层次
+
+1. **单元测试** - 每个 internal 包都有对应的 `*_test.go` 文件
+2. **集成测试** - `test/integration_test.go` 测试完整流程
+3. **Mock 服务** - `test/mock_kms.go` 和 `test/mock_downstream.go` 用于测试
+
+### 运行测试
+
+```bash
+# 运行所有测试
+go test ./...
+
+# 运行特定包的测试
+go test ./internal/kms/...
+go test ./internal/signer/...
+
+# 运行测试（详细输出）
+go test -v ./...
+
+# 运行测试（竞态检测）
+go test -race ./...
+
+# 运行集成测试
+go test ./test/... -v
+```
+
+### 测试覆盖率
+
+当前项目具有完整的测试覆盖：
+
+- ✅ 配置解析与验证
+- ✅ KMS 客户端签名逻辑
+- ✅ 签名器交易签名
+- ✅ JSON-RPC 路由
+- ✅ 下游服务转发
+- ✅ 错误处理
+
+---
+
+## 编码规范
+
+### Go 代码风格
+
+- 遵循 [Effective Go](https://golang.org/doc/effective_go) 指南
+- 使用 `gofmt` 格式化代码
+- 使用 `go vet` 进行静态检查
+- 使用 `golangci-lint` 进行综合检查
+
+### 项目特定规范
+
+1. **包命名** - 使用小写单词，避免下划线
+2. **接口命名** - 单方法接口以方法名 + er 结尾（如 `ClientInterface`）
+3. **错误处理** - 错误消息不要以大写字母开头，不要包含标点符号
+4. **日志** - 使用 `logrus` 结构化日志，敏感信息（密钥、签名）不记录
+
+### 提交规范
+
+使用 Conventional Commits 格式：
+
+```
+feat(kms): add HTTP client abstraction layer
+fix(signer): correct transaction hash calculation
+test(router): add integration test for batch requests
+docs(readme): update deployment instructions
+```
+
+---
+
+## AI 使用指引
+
+### 代码审查重点
+
+作为 Linus Torvalds 的视角，审查代码时应关注：
+
+1. **数据结构优先** - 是否有清晰的数据结构？还是一堆 if/else 补丁？
+2. **特殊情况消除** - 是否有不必要的边界检查？能否重新设计消除分支？
+3. **职责单一** - 函数是否只做一件事？是否超过3层缩进？
+4. **错误处理** - 是否直接暴露问题，还是掩盖错误？
+5. **接口设计** - 接口是否简洁？是否过度抽象？
+
+### 关键设计决策
+
+#### ✅ 好的设计
+
+1. **使用 ethgo 库** - 不重新发明轮子，直接使用成熟的以太坊库
+2. **实现 ethgo.Key 接口** - 可测试，可替换实现
+3. **单一职责分离** - 每个包只做一件事
+4. **错误直接透传** - 不掩盖问题，让错误在测试中暴露
+
+#### ⚠️ 需要注意的地方
+
+1. **签名器日志过多** (`internal/signer/signer.go`)
+   - 有一堆 `logrus.WithFields(...).Info()`
+   - 应该用 debug 级别或删掉
+
+2. **`trimBytesZeros` 特殊处理**
+   - 这是数据源的问题，应该在上游解决
+
+3. **`hasPort` 字符串检查** (`internal/config/config.go`)
+   - 应该用 `url.Parse()` 而不是自己写
+
+### 扩展建议
+
+如果需要扩展功能，优先考虑：
+
+1. **多密钥支持** - 当前只支持单个 `key-id`
+2. **异步签名审批** - MPC-KMS 支持审批流程，可以添加轮询逻辑
+3. **EIP-1559 类型支持** - 当前已支持，但可以增强测试
+4. **健康检查端点** - 添加 `/health` 和 `/ready` 端点
+5. **指标收集** - 添加 Prometheus 指标
+
+---
+
+## 技术栈
+
+### 核心依赖
+
+- **Go 1.25+** - 编程语言
+- **Gin** - HTTP Web 框架
+- **Cobra** - CLI 框架
+- **Viper** - 配置管理
+- **Logrus** - 结构化日志
+- **ethgo** - 以太坊工具库
+
+### 开发工具
+
+- **golangci-lint** - 代码检查
+- **pre-commit** - Git hooks（如果有配置）
+
+---
+
+## 相关资源
+
+- **GitHub 仓库**: `git@github.com:mowind/web3signer-go.git`
+- **上游项目**: [Consensys/web3signer](https://github.com/Consensys/web3signer)
+- **MPC-KMS 文档**: (请补充实际 KMS 服务文档链接)
+- **以太坊 JSON-RPC 规范**: [https://ethereum.org/en/developers/docs/apis/json-rpc/](https://ethereum.org/en/developers/docs/apis/json-rpc/)
+
+---
+
+## 下一步建议
+
+### 功能扩展
+
+1. 添加健康检查端点 (`/health`, `/ready`)
+2. 添加 Prometheus 指标收集
+3. 支持多个 `key-id` 配置
+4. 支持异步签名审批流程（任务轮询）
+
+### 质量改进
+
+1. 减少 `signer.go` 中的日志输出
+2. 重构 `hasPort` 使用 `url.Parse()`
+3. 添加性能基准测试 (`_bench_test.go`)
+4. 添加更多边界情况的测试用例
+
+### 部署优化
+
+1. 添加 Docker 镜像构建
+2. 添加 Kubernetes 部署文件
+3. 增强 CI/CD 流程（已有 `.github/workflows/ci.yml`）
+
+---
+
+**文档版本**: 1.0.0
+**维护者**: mowind
+**许可证**: GNU General Public License v3.0 (GPLv3)
