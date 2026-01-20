@@ -1,8 +1,9 @@
 package server
 
 import (
+	"crypto/rand"
 	"fmt"
-	"math/rand"
+	"math/big"
 	"strings"
 	"time"
 
@@ -122,17 +123,16 @@ func (b *Builder) requestIDMiddleware() gin.HandlerFunc {
 	}
 }
 
-// generateRequestID 生成唯一请求 ID
 func generateRequestID() string {
 	return fmt.Sprintf("%s-%d", randomString(8), time.Now().UnixNano())
 }
 
-// randomString 生成随机字符串
 func randomString(length int) string {
 	const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 	b := make([]byte, length)
 	for i := range b {
-		b[i] = charset[rand.Intn(len(charset))]
+		n, _ := rand.Int(rand.Reader, big.NewInt(int64(len(charset))))
+		b[i] = charset[n.Int64()]
 	}
 	return string(b)
 }
