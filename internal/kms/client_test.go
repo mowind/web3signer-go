@@ -18,6 +18,14 @@ import (
 	"github.com/mowind/web3signer-go/internal/config"
 )
 
+// defaultLogConfig 返回测试用的默认日志配置
+func defaultLogConfig() *config.LogConfig {
+	return &config.LogConfig{
+		Level:  config.LogLevelDebug, // 测试时使用 debug 级别以便看到所有日志
+		Format: config.LogFormatText, // 默认使用 text 格式
+	}
+}
+
 func TestCalculateContentSHA256(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -167,7 +175,7 @@ func TestClient_SignRequest(t *testing.T) {
 		KeyID:       "test-key-id",
 	}
 
-	httpClient := NewHTTPClient(cfg)
+	httpClient := NewHTTPClient(cfg, defaultLogConfig())
 
 	tests := []struct {
 		name        string
@@ -271,7 +279,7 @@ func TestHTTPClient_Do(t *testing.T) {
 		KeyID:       "test-key-id",
 	}
 
-	httpClient := NewHTTPClient(cfg)
+	httpClient := NewHTTPClient(cfg, defaultLogConfig())
 
 	// 创建一个测试请求
 	body := []byte(`{"data": "test data", "encoding": "PLAIN"}`)
@@ -326,7 +334,7 @@ func TestClient_Sign(t *testing.T) {
 		KeyID:       "test-key-id",
 	}
 
-	client := NewClient(cfg)
+	client := NewClient(cfg, defaultLogConfig())
 
 	// 创建mock服务器
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -376,7 +384,7 @@ func TestClient_Sign(t *testing.T) {
 	defer server.Close()
 
 	// 更新客户端配置使用测试服务器
-	client.config.Endpoint = server.URL
+	client.kmsConfig.Endpoint = server.URL
 
 	tests := []struct {
 		name        string
@@ -433,7 +441,7 @@ func TestClient_SignWithOptions(t *testing.T) {
 		KeyID:       "test-key-id",
 	}
 
-	client := NewClient(cfg)
+	client := NewClient(cfg, defaultLogConfig())
 
 	// 创建mock服务器
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -469,7 +477,7 @@ func TestClient_SignWithOptions(t *testing.T) {
 	defer server.Close()
 
 	// 更新客户端配置使用测试服务器
-	client.config.Endpoint = server.URL
+	client.kmsConfig.Endpoint = server.URL
 
 	summary := NewTransferSummary("0x123", "0x456", "1.0", "ETH", "test transfer")
 
@@ -496,7 +504,7 @@ func TestClient_GetTaskResult(t *testing.T) {
 		KeyID:       "test-key-id",
 	}
 
-	client := NewClient(cfg)
+	client := NewClient(cfg, defaultLogConfig())
 
 	// 创建mock服务器
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -533,7 +541,7 @@ func TestClient_GetTaskResult(t *testing.T) {
 	defer server.Close()
 
 	// 更新客户端配置使用测试服务器
-	client.config.Endpoint = server.URL
+	client.kmsConfig.Endpoint = server.URL
 
 	t.Run("get task result success", func(t *testing.T) {
 		result, err := client.GetTaskResult(context.Background(), "task-12345")
@@ -568,7 +576,7 @@ func TestClient_GetTaskResult(t *testing.T) {
 		}))
 		defer errorServer.Close()
 
-		client.config.Endpoint = errorServer.URL
+		client.kmsConfig.Endpoint = errorServer.URL
 		_, err := client.GetTaskResult(context.Background(), "non-existent-task")
 		if err == nil {
 			t.Error("Expected error for non-existent task")
@@ -584,7 +592,7 @@ func TestClient_WaitForTaskCompletion(t *testing.T) {
 		KeyID:       "test-key-id",
 	}
 
-	client := NewClient(cfg)
+	client := NewClient(cfg, defaultLogConfig())
 
 	// 创建mock服务器，模拟任务从PENDING到COMPLETED的状态变化
 	callCount := 0
@@ -627,7 +635,7 @@ func TestClient_WaitForTaskCompletion(t *testing.T) {
 	defer server.Close()
 
 	// 更新客户端配置使用测试服务器
-	client.config.Endpoint = server.URL
+	client.kmsConfig.Endpoint = server.URL
 
 	t.Run("wait for task completion", func(t *testing.T) {
 		t.Skip("Skipping due to JSON parsing issues in WaitForTaskCompletion")
@@ -645,7 +653,7 @@ func TestClient_WaitForTaskCompletion(t *testing.T) {
 		}))
 		defer pendingServer.Close()
 
-		client.config.Endpoint = pendingServer.URL
+		client.kmsConfig.Endpoint = pendingServer.URL
 
 		ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
 		defer cancel()
@@ -668,7 +676,7 @@ func TestClient_SignWithOptions_MoreCases(t *testing.T) {
 		KeyID:       "test-key-id",
 	}
 
-	client := NewClient(cfg)
+	client := NewClient(cfg, defaultLogConfig())
 
 	t.Run("sign with callback URL", func(t *testing.T) {
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -694,7 +702,7 @@ func TestClient_SignWithOptions_MoreCases(t *testing.T) {
 		}))
 		defer server.Close()
 
-		client.config.Endpoint = server.URL
+		client.kmsConfig.Endpoint = server.URL
 
 		signature, err := client.SignWithOptions(
 			context.Background(),
@@ -739,7 +747,7 @@ func TestClient_SignWithOptions_MoreCases(t *testing.T) {
 		}))
 		defer server.Close()
 
-		client.config.Endpoint = server.URL
+		client.kmsConfig.Endpoint = server.URL
 
 		summary := NewTransferSummary("0x123", "0x456", "1.0", "ETH", "test transfer")
 		signature, err := client.SignWithOptions(

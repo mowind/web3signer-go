@@ -8,21 +8,26 @@ import (
 	"time"
 
 	"github.com/mowind/web3signer-go/internal/config"
+	"github.com/sirupsen/logrus"
 )
 
 // HTTPClient 处理 MPC-KMS HTTP 请求签名和执行
 type HTTPClient struct {
-	config     *config.KMSConfig
+	kmsConfig  *config.KMSConfig
+	logConfig  *config.LogConfig
 	httpClient *http.Client
+	logger     *logrus.Logger
 }
 
 // NewHTTPClient 创建新的 HTTP 客户端
-func NewHTTPClient(cfg *config.KMSConfig) *HTTPClient {
+func NewHTTPClient(kmsCfg *config.KMSConfig, logCfg *config.LogConfig) *HTTPClient {
 	return &HTTPClient{
-		config: cfg,
+		kmsConfig: kmsCfg,
+		logConfig: logCfg,
 		httpClient: &http.Client{
 			Timeout: 30 * time.Second,
 		},
+		logger: newLogger(logCfg.Level, logCfg.Format),
 	}
 }
 
@@ -44,10 +49,10 @@ func (c *HTTPClient) SignRequest(req *http.Request, body []byte) error {
 	signingString := BuildSigningString(req.Method, contentSHA256, contentType, date)
 
 	// 5. 计算 HMAC-SHA256 签名
-	signature := CalculateHMACSHA256(signingString, c.config.SecretKey)
+	signature := CalculateHMACSHA256(signingString, c.kmsConfig.SecretKey)
 
 	// 6. 构建 Authorization 头（根据文档规范）
-	authHeader := BuildAuthorizationHeader(c.config.AccessKeyID, signature)
+	authHeader := BuildAuthorizationHeader(c.kmsConfig.AccessKeyID, signature)
 
 	// 7. 设置请求头
 	req.Header.Set("Authorization", authHeader)
@@ -59,12 +64,23 @@ func (c *HTTPClient) SignRequest(req *http.Request, body []byte) error {
 
 // Do 执行已签名的 HTTP 请求
 func (c *HTTPClient) Do(req *http.Request) (*http.Response, error) {
+	// 记录请求开始（debug 级别）
+	c.logger.WithFields(logrus.Fields{
+		"method": req.Method,
+		"url":    req.URL.String(),
+	}).Debug("Executing HTTP request")
+
 	// 读取请求体以便计算哈希
 	var body []byte
 	if req.Body != nil {
 		var err error
 		body, err = io.ReadAll(req.Body)
 		if err != nil {
+			c.logger.WithFields(logrus.Fields{
+				"method": req.Method,
+				"url":    req.URL.String(),
+				"error":  err.Error(),
+			}).Error("Failed to read request body")
 			return nil, fmt.Errorf("failed to read request body: %w", err)
 		}
 		req.Body = io.NopCloser(strings.NewReader(string(body)))
@@ -72,11 +88,33 @@ func (c *HTTPClient) Do(req *http.Request) (*http.Response, error) {
 
 	// 签名请求
 	if err := c.SignRequest(req, body); err != nil {
+		c.logger.WithFields(logrus.Fields{
+			"method": req.Method,
+			"url":    req.URL.String(),
+			"error":  err.Error(),
+		}).Error("Failed to sign request")
 		return nil, fmt.Errorf("failed to sign request: %w", err)
 	}
 
 	// 执行请求
-	return c.httpClient.Do(req)
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		c.logger.WithFields(logrus.Fields{
+			"method": req.Method,
+			"url":    req.URL.String(),
+			"error":  err.Error(),
+		}).Error("HTTP request failed")
+		return nil, err
+	}
+
+	// 记录响应状态（debug 级别）
+	c.logger.WithFields(logrus.Fields{
+		"method":      req.Method,
+		"url":         req.URL.String(),
+		"status_code": resp.StatusCode,
+	}).Debug("HTTP request completed")
+
+	return resp, nil
 }
 
 // HTTPClientInterface 定义 HTTP 客户端接口

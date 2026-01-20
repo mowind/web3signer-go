@@ -28,8 +28,14 @@ func main() {
 	fmt.Printf("SecretKey: [REDACTED]\n")
 	fmt.Println()
 
+	// 创建日志配置
+	logConfig := &config.LogConfig{
+		Level:  "debug",
+		Format: "text",
+	}
+
 	// 创建KMS客户端
-	client := kms.NewClient(kmsConfig)
+	client := kms.NewClient(kmsConfig, logConfig)
 
 	// 测试1: 测试签名请求构建
 	fmt.Println("测试1: 测试签名请求构建")
@@ -67,8 +73,14 @@ func testSignRequest(kmsConfig *config.KMSConfig) error {
 		return fmt.Errorf("创建请求失败: %w", err)
 	}
 
+	// 创建日志配置
+	logConfig := &config.LogConfig{
+		Level:  "debug",
+		Format: "text",
+	}
+
 	// 创建 HTTP 客户端进行签名
-	httpClient := kms.NewHTTPClient(kmsConfig)
+	httpClient := kms.NewHTTPClient(kmsConfig, logConfig)
 
 	// 签名请求
 	if err := httpClient.SignRequest(req, testData); err != nil {

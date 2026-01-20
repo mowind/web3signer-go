@@ -169,7 +169,7 @@ func TestNewMPCKMSSigner(t *testing.T) {
 		KeyID:       "test-key-id",
 	}
 
-	client := NewClient(cfg)
+	client := NewClient(cfg, defaultLogConfig())
 	signer := NewMPCKMSSigner(client, cfg.KeyID)
 
 	if signer == nil {
@@ -197,7 +197,7 @@ func TestInterfaceImplementation(t *testing.T) {
 		KeyID:       "test-key-id",
 	}
 
-	client := NewClient(cfg)
+	client := NewClient(cfg, defaultLogConfig())
 	signer := NewMPCKMSSigner(client, cfg.KeyID)
 
 	// 类型断言验证
