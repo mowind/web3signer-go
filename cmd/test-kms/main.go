@@ -33,7 +33,7 @@ func main() {
 
 	// 测试1: 测试签名请求构建
 	fmt.Println("测试1: 测试签名请求构建")
-	if err := testSignRequest(client); err != nil {
+	if err := testSignRequest(kmsConfig); err != nil {
 		fmt.Printf("❌ 测试1失败: %v\n", err)
 	} else {
 		fmt.Println("✅ 测试1通过: 签名请求构建成功")
@@ -59,16 +59,19 @@ func main() {
 	}
 }
 
-func testSignRequest(client *kms.Client) error {
+func testSignRequest(kmsConfig *config.KMSConfig) error {
 	// 创建一个测试请求
 	testData := []byte(`{"data": "test", "encoding": "PLAIN"}`)
-	req, err := http.NewRequest("POST", "http://10.2.8.108:8080/api/v1/keys/test/sign", bytes.NewReader(testData))
+	req, err := http.NewRequest("POST", kmsConfig.Endpoint+"/api/v1/keys/test/sign", bytes.NewReader(testData))
 	if err != nil {
 		return fmt.Errorf("创建请求失败: %w", err)
 	}
 
+	// 创建 HTTP 客户端进行签名
+	httpClient := kms.NewHTTPClient(kmsConfig)
+
 	// 签名请求
-	if err := client.SignRequest(req, testData); err != nil {
+	if err := httpClient.SignRequest(req, testData); err != nil {
 		return fmt.Errorf("签名请求失败: %w", err)
 	}
 

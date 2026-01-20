@@ -14,7 +14,7 @@ import (
 )
 
 func TestTestSignRequest(t *testing.T) {
-	// Create a mock client
+	// Test the testSignRequest function
 	kmsConfig := &config.KMSConfig{
 		Endpoint:    "http://localhost:8080",
 		AccessKeyID: "test-access-key",
@@ -22,10 +22,7 @@ func TestTestSignRequest(t *testing.T) {
 		KeyID:       "test-key-id",
 	}
 
-	client := kms.NewClient(kmsConfig)
-
-	// Test the testSignRequest function
-	err := testSignRequest(client)
+	err := testSignRequest(kmsConfig)
 	if err != nil {
 		// This is expected to fail since we're using a mock endpoint
 		// Just verify it doesn't panic
