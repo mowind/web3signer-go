@@ -1,24 +1,27 @@
 package server
 
 import (
+	"fmt"
+	"math/rand"
 	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
-	ginlogrus "github.com/toorop/gin-logrus"
 	"github.com/mowind/web3signer-go/internal/config"
 	"github.com/mowind/web3signer-go/internal/downstream"
 	"github.com/mowind/web3signer-go/internal/kms"
 	"github.com/mowind/web3signer-go/internal/router"
 	"github.com/mowind/web3signer-go/internal/signer"
 	"github.com/sirupsen/logrus"
+	ginlogrus "github.com/toorop/gin-logrus"
 	"github.com/umbracle/ethgo"
 	ethgojsonrpc "github.com/umbracle/ethgo/jsonrpc"
 )
 
 // Builder 服务器构建器
 type Builder struct {
-	cfg *config.Config
+	cfg    *config.Config
+	logger *logrus.Logger
 }
 
 // NewBuilder 创建新的服务器构建器
@@ -31,6 +34,7 @@ func (b *Builder) Build() *Server {
 	b.setGinMode()
 
 	logger := b.createLogger()
+	b.logger = logger
 
 	downstreamClient := downstream.NewClient(&b.cfg.Downstream)
 
@@ -80,12 +84,11 @@ func (b *Builder) setGinMode() {
 func (b *Builder) createGinRouter(jsonRPCRouter *router.Router, logger *logrus.Logger) *gin.Engine {
 	router := gin.New()
 
-	// 使用 logrus 替代 gin 的默认 logger
+	// 添加请求 ID 中间件
+	router.Use(b.requestIDMiddleware())
 	router.Use(ginlogrus.Logger(logger))
 	router.Use(gin.Recovery())
 	router.Use(b.corsMiddleware())
-
-	// 移除原来的条件判断（Gin 日志现在通过 logrus 统一输出）
 
 	// JSON-RPC端点，路由到jsonRPCRouter
 	router.POST("/", b.handleJSONRPCRequest(jsonRPCRouter))
@@ -98,6 +101,38 @@ func (b *Builder) createGinRouter(jsonRPCRouter *router.Router, logger *logrus.L
 	router.GET("/ready", b.readyHandler(logger))
 
 	return router
+}
+
+// requestIDMiddleware 生成并传递请求 ID
+func (b *Builder) requestIDMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		// 生成或获取请求 ID
+		requestID := c.GetHeader("X-Request-ID")
+		if requestID == "" {
+			requestID = generateRequestID()
+		}
+
+		// 保存到上下文
+		c.Set("request_id", requestID)
+		c.Header("X-Request-ID", requestID)
+
+		c.Next()
+	}
+}
+
+// generateRequestID 生成唯一请求 ID
+func generateRequestID() string {
+	return fmt.Sprintf("%s-%d", randomString(8), time.Now().UnixNano())
+}
+
+// randomString 生成随机字符串
+func randomString(length int) string {
+	const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+	b := make([]byte, length)
+	for i := range b {
+		b[i] = charset[rand.Intn(len(charset))]
+	}
+	return string(b)
 }
 
 // createLogger 创建日志器
@@ -163,8 +198,18 @@ func (b *Builder) readyHandler(logger *logrus.Logger) gin.HandlerFunc {
 // handleJSONRPCRequest 处理JSON-RPC请求
 func (b *Builder) handleJSONRPCRequest(jsonRPCRouter *router.Router) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		jsonRPCRouter.HandleHTTPRequest(c.Writer, c.Request)
+		logger := b.getLoggerWithContext(c)
+		jsonRPCRouter.HandleHTTPRequestWithContext(c.Writer, c.Request, logger)
 	}
+}
+
+// getLoggerWithContext 获取带上下文的 logger
+func (b *Builder) getLoggerWithContext(c *gin.Context) *logrus.Entry {
+	logger := b.logger.WithField("component", "http_server")
+	if requestID, exists := c.Get("request_id"); exists {
+		logger = logger.WithField("request_id", requestID)
+	}
+	return logger
 }
 
 // corsMiddleware 处理CORS请求
