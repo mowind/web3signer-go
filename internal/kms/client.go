@@ -94,13 +94,27 @@ func (c *Client) SignWithOptions(ctx context.Context, keyID string, message []by
 		return []byte(signResp.Signature), nil
 
 	case http.StatusCreated:
-		// 需要审批，返回任务ID
+		// 需要审批，自动轮询任务结果
 		taskResp, err := UnmarshalTaskResponse(respBody)
 		if err != nil {
 			return nil, fmt.Errorf("failed to unmarshal task response: %w", err)
 		}
-		// TODO: 实现任务轮询逻辑
-		return nil, fmt.Errorf("signature requires approval, task_id: %s", taskResp.TaskID)
+
+		// 轮询任务完成(最多等待5分钟)
+		ctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
+		defer cancel()
+
+		result, err := c.WaitForTaskCompletion(ctx, taskResp.TaskID, 5*time.Second)
+		if err != nil {
+			return nil, fmt.Errorf("task polling failed: %w", err)
+		}
+
+		// 返回签名结果
+		var signResp SignResponse
+		if err := json.Unmarshal([]byte(result.Response), &signResp); err != nil {
+			return nil, fmt.Errorf("failed to parse signature from task: %w", err)
+		}
+		return []byte(signResp.Signature), nil
 
 	default:
 		// 处理错误响应
