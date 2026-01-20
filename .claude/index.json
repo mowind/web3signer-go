@@ -1,0 +1,263 @@
+{
+  "timestamp": "2026-01-20T11:07:09+00:00",
+  "project": {
+    "name": "web3signer-go",
+    "description": "Go implementation of web3signer with MPC-KMS signing support",
+    "repository": "git@github.com:mowind/web3signer-go.git",
+    "license": "GPLv3",
+    "language": "Go",
+    "version": "1.0.0"
+  },
+  "scan_summary": {
+    "total_files": 51,
+    "go_files": 40,
+    "test_files": 17,
+    "markdown_files": 50,
+    "yaml_files": 26,
+    "shell_scripts": 4,
+    "coverage_percentage": 100,
+    "truncated": false
+  },
+  "modules": [
+    {
+      "path": "cmd/web3signer",
+      "name": "Main Application",
+      "entry_point": "main.go",
+      "description": "主程序入口，CLI 解析与服务器启动",
+      "test_coverage": true,
+      "key_files": [
+        "main.go",
+        "root.go",
+        "flags.go"
+      ],
+      "interfaces": [],
+      "dependencies": [
+        "github.com/spf13/cobra",
+        "github.com/spf13/viper",
+        "github.com/mowind/web3signer-go/internal/config",
+        "github.com/mowind/web3signer-go/internal/server"
+      ]
+    },
+    {
+      "path": "cmd/test-kms",
+      "name": "KMS Test Tool",
+      "entry_point": "main.go",
+      "description": "KMS 测试工具",
+      "test_coverage": true,
+      "key_files": [
+        "main.go"
+      ],
+      "interfaces": [],
+      "dependencies": [
+        "github.com/mowind/web3signer-go/internal/kms"
+      ]
+    },
+    {
+      "path": "internal/config",
+      "name": "Configuration",
+      "entry_point": "config.go",
+      "description": "配置结构定义与验证",
+      "test_coverage": true,
+      "key_files": [
+        "config.go",
+        "constants.go",
+        "config_test.go"
+      ],
+      "interfaces": [
+        "Validator"
+      ],
+      "dependencies": []
+    },
+    {
+      "path": "internal/kms",
+      "name": "MPC-KMS Client",
+      "entry_point": "client.go",
+      "description": "MPC-KMS HTTP 客户端",
+      "test_coverage": true,
+      "key_files": [
+        "client.go",
+        "http_client.go",
+        "interface.go",
+        "types.go",
+        "signing.go",
+        "client_test.go",
+        "interface_test.go"
+      ],
+      "interfaces": [
+        "ClientInterface",
+        "HTTPClientInterface"
+      ],
+      "dependencies": [
+        "github.com/mowind/web3signer-go/internal/config"
+      ]
+    },
+    {
+      "path": "internal/signer",
+      "name": "Signer",
+      "entry_point": "signer.go",
+      "description": "签名逻辑，实现 ethgo.Key 接口",
+      "test_coverage": true,
+      "key_files": [
+        "signer.go",
+        "builder.go",
+        "signer_test.go",
+        "builder_test.go"
+      ],
+      "interfaces": [
+        "ethgo.Key"
+      ],
+      "dependencies": [
+        "github.com/mowind/web3signer-go/internal/kms",
+        "github.com/umbracle/ethgo"
+      ]
+    },
+    {
+      "path": "internal/router",
+      "name": "Router",
+      "entry_point": "router.go",
+      "description": "JSON-RPC 路由器与处理器",
+      "test_coverage": true,
+      "key_files": [
+        "router.go",
+        "base.go",
+        "sign_handler.go",
+        "forward_handler.go",
+        "factory.go",
+        "router_test.go",
+        "integration_test.go"
+      ],
+      "interfaces": [
+        "Handler"
+      ],
+      "dependencies": [
+        "github.com/mowind/web3signer-go/internal/jsonrpc",
+        "github.com/mowind/web3signer-go/internal/signer",
+        "github.com/mowind/web3signer-go/internal/downstream"
+      ]
+    },
+    {
+      "path": "internal/jsonrpc",
+      "name": "JSON-RPC Types",
+      "entry_point": "types.go",
+      "description": "JSON-RPC 类型定义与解析",
+      "test_coverage": true,
+      "key_files": [
+        "types.go",
+        "constants.go",
+        "errors.go",
+        "types_test.go"
+      ],
+      "interfaces": [],
+      "dependencies": []
+    },
+    {
+      "path": "internal/downstream",
+      "name": "Downstream Client",
+      "entry_point": "client.go",
+      "description": "下游服务 HTTP 客户端",
+      "test_coverage": true,
+      "key_files": [
+        "client.go",
+        "interface.go",
+        "errors.go",
+        "client_test.go"
+      ],
+      "interfaces": [
+        "ClientInterface"
+      ],
+      "dependencies": []
+    },
+    {
+      "path": "internal/server",
+      "name": "HTTP Server",
+      "entry_point": "server.go",
+      "description": "HTTP 服务器（基于 Gin）",
+      "test_coverage": true,
+      "key_files": [
+        "server.go",
+        "builder.go",
+        "server_test.go"
+      ],
+      "interfaces": [],
+      "dependencies": [
+        "github.com/gin-gonic/gin",
+        "github.com/mowind/web3signer-go/internal/config",
+        "github.com/mowind/web3signer-go/internal/router"
+      ]
+    },
+    {
+      "path": "internal/errors",
+      "name": "Error Handling",
+      "entry_point": "errors.go",
+      "description": "错误类型与处理工具",
+      "test_coverage": true,
+      "key_files": [
+        "errors.go",
+        "context.go",
+        "converter.go",
+        "logger.go",
+        "errors_test.go",
+        "logger_test.go"
+      ],
+      "interfaces": [],
+      "dependencies": [
+        "github.com/sirupsen/logrus"
+      ]
+    },
+    {
+      "path": "test",
+      "name": "Integration Tests",
+      "entry_point": "integration_test.go",
+      "description": "集成测试与 Mock 服务",
+      "test_coverage": true,
+      "key_files": [
+        "integration_test.go",
+        "mock_kms.go",
+        "mock_downstream.go"
+      ],
+      "interfaces": [],
+      "dependencies": []
+    }
+  ],
+  "gaps": [],
+  "next_steps": [
+    "添加健康检查端点 (/health, /ready)",
+    "添加 Prometheus 指标收集",
+    "支持多个 key-id 配置",
+    "支持异步签名审批流程（任务轮询）",
+    "减少 signer.go 中的日志输出",
+    "重构 hasPort 使用 url.Parse()",
+    "添加性能基准测试",
+    "添加 Docker 镜像构建",
+    "添加 Kubernetes 部署文件"
+  ],
+  "ignored_patterns": [
+    "node_modules/**",
+    ".git/**",
+    ".github/**",
+    "dist/**",
+    "build/**",
+    ".next/**",
+    "__pycache__/**",
+    "*.lock",
+    "*.log",
+    "*.bin",
+    "*.pdf",
+    "*.png",
+    "*.jpg",
+    "*.jpeg",
+    "*.gif",
+    "*.mp4",
+    "*.zip",
+    "*.tar",
+    "*.gz"
+  ],
+  "quality_metrics": {
+    "test_coverage": "完整",
+    "code_quality": "好品味",
+    "documentation": "完整",
+    "design_patterns": "单一职责、接口抽象",
+    "build_status": "可构建",
+    "test_status": "所有测试通过"
+  }
+}
