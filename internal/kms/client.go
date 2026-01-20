@@ -45,10 +45,10 @@ func newLogger(level, format string) *logrus.Logger {
 
 // Client 表示 MPC-KMS 客户端
 type Client struct {
-	kmsConfig      *config.KMSConfig
-	logConfig      *config.LogConfig
-	httpClient     HTTPClientInterface
-	logger         *logrus.Logger
+	kmsConfig  *config.KMSConfig
+	logConfig  *config.LogConfig
+	httpClient HTTPClientInterface
+	logger     *logrus.Logger
 }
 
 // NewClient 创建新的 MPC-KMS 客户端
@@ -92,10 +92,10 @@ func (c *Client) SignWithOptions(ctx context.Context, keyID string, message []by
 
 	// 记录请求开始
 	c.logger.WithFields(logrus.Fields{
-		"key_id":      keyID,
-		"encoding":    encoding,
-		"endpoint":    c.kmsConfig.Endpoint,
-		"has_summary": summary != nil,
+		"key_id":       keyID,
+		"encoding":     encoding,
+		"endpoint":     c.kmsConfig.Endpoint,
+		"has_summary":  summary != nil,
 		"has_callback": callbackURL != "",
 	}).Info("Starting sign request")
 
@@ -114,10 +114,12 @@ func (c *Client) SignWithOptions(ctx context.Context, keyID string, message []by
 		return nil, fmt.Errorf("failed to marshal sign request: %w", err)
 	}
 
-	// 记录请求体（用于调试，但message已经在signReq中处理）
+	// 记录请求体（用于调试）
+	// 注意：请求体包含待签名数据和交易摘要，不是敏感数据（如私钥）
+	// 这些数据对开发调试签名流程非常有价值
 	c.logger.WithFields(logrus.Fields{
-		"key_id":         keyID,
-		"request_body":   string(reqBody), // 包含 message，用于开发调试
+		"key_id":       keyID,
+		"request_body": string(reqBody),
 	}).Debug("Sign request body")
 
 	// 构建请求URL
@@ -152,13 +154,21 @@ func (c *Client) SignWithOptions(ctx context.Context, keyID string, message []by
 		return nil, fmt.Errorf("failed to read response body: %w", err)
 	}
 
-	// 记录响应体（不包含敏感信息的部分）
+	// 统一响应日志格式 - 使用 has_signature 布尔值
 	c.logger.WithFields(logrus.Fields{
-		"key_id":      keyID,
-		"url":         url,
-		"status_code": resp.StatusCode,
-		"response_body_preview": string(respBody), // 签名响应包含 signature，但这是开发调试需要
-	}).Debug("Sign request response")
+		"key_id":        keyID,
+		"endpoint":      c.kmsConfig.Endpoint,
+		"status_code":   resp.StatusCode,
+		"has_signature": resp.StatusCode == http.StatusOK,
+	}).Debug("Sign response received")
+
+	// Debug 级别记录完整响应体（用于调试签名流程）
+	if c.logger.IsLevelEnabled(logrus.DebugLevel) {
+		c.logger.WithFields(logrus.Fields{
+			"key_id":        keyID,
+			"response_body": string(respBody),
+		}).Debug("Sign response body")
+	}
 
 	// 检查HTTP状态码
 	switch resp.StatusCode {
@@ -171,9 +181,9 @@ func (c *Client) SignWithOptions(ctx context.Context, keyID string, message []by
 		}
 
 		c.logger.WithFields(logrus.Fields{
-			"key_id":       keyID,
-			"duration_ms":  duration,
-			"status":       "completed",
+			"key_id":      keyID,
+			"duration_ms": duration,
+			"status":      "completed",
 		}).Info("Sign request completed successfully")
 
 		return []byte(signResp.Signature), nil
@@ -212,10 +222,10 @@ func (c *Client) SignWithOptions(ctx context.Context, keyID string, message []by
 
 		duration := time.Since(startTime).Milliseconds()
 		c.logger.WithFields(logrus.Fields{
-			"key_id":       keyID,
-			"task_id":      taskResp.TaskID,
-			"duration_ms":  duration,
-			"status":       "approved_and_completed",
+			"key_id":      keyID,
+			"task_id":     taskResp.TaskID,
+			"duration_ms": duration,
+			"status":      "approved_and_completed",
 		}).Info("Sign request completed after approval")
 
 		return []byte(signResp.Signature), nil
@@ -268,8 +278,8 @@ func (c *Client) GetTaskResult(ctx context.Context, taskID string) (*TaskResult,
 
 	// 记录任务结果响应（安全，不包含敏感信息）
 	c.logger.WithFields(logrus.Fields{
-		"task_id":      taskID,
-		"status_code":  resp.StatusCode,
+		"task_id":       taskID,
+		"status_code":   resp.StatusCode,
 		"response_body": string(respBody),
 	}).Debug("Task result response")
 
