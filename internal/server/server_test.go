@@ -263,11 +263,14 @@ func TestBuilder_createGinRouter_handleJSONRPCRequest(t *testing.T) {
 func TestBuilder_createGinRouter_Build(t *testing.T) {
 	mockDownstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		if err := json.NewEncoder(w).Encode(map[string]interface{}{
 			"jsonrpc": "2.0",
 			"id":      uint64(1),
 			"result":  "0x1",
-		})
+		}); err != nil {
+			http.Error(w, "Failed to encode response", http.StatusInternalServerError)
+			return
+		}
 	}))
 	defer mockDownstream.Close()
 

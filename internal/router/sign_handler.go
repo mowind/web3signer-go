@@ -83,7 +83,7 @@ func (h *SignHandler) handleEthSign(ctx context.Context, request *internaljsonrp
 	}
 
 	expectedAddress := h.signer.Address().String()
-	if strings.ToLower(address) != strings.ToLower(expectedAddress) {
+	if !strings.EqualFold(address, expectedAddress) {
 		h.logger.WithFields(logrus.Fields{
 			"expected": expectedAddress,
 			"provided": address,
@@ -124,7 +124,7 @@ func (h *SignHandler) handleEthSignTransaction(ctx context.Context, request *int
 	}).Info("Signing transaction")
 
 	expectedAddress := h.signer.Address().String()
-	if strings.ToLower(txParams.From) != strings.ToLower(expectedAddress) {
+	if !strings.EqualFold(txParams.From, expectedAddress) {
 		h.logger.WithFields(logrus.Fields{
 			"expected": expectedAddress,
 			"provided": txParams.From,
@@ -166,7 +166,7 @@ func (h *SignHandler) handleEthSendTransaction(ctx context.Context, request *int
 	}).Info("Sending transaction")
 
 	expectedAddress := h.signer.Address().String()
-	if strings.ToLower(txParams.From) != strings.ToLower(expectedAddress) {
+	if !strings.EqualFold(txParams.From, expectedAddress) {
 		h.logger.WithFields(logrus.Fields{
 			"expected": expectedAddress,
 			"provided": txParams.From,

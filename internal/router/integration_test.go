@@ -89,7 +89,10 @@ func (c *testDownstreamClient) Close() error {
 func newMockDownstreamClient() *testDownstreamClient {
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var reqBody map[string]interface{}
-		json.NewDecoder(r.Body).Decode(&reqBody)
+		if err := json.NewDecoder(r.Body).Decode(&reqBody); err != nil {
+			http.Error(w, "Invalid JSON", http.StatusBadRequest)
+			return
+		}
 		method, _ := reqBody["method"].(string)
 
 		var response interface{}
@@ -133,7 +136,10 @@ func newMockDownstreamClient() *testDownstreamClient {
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(response)
+		if err := json.NewEncoder(w).Encode(response); err != nil {
+			http.Error(w, "Failed to encode response", http.StatusInternalServerError)
+			return
+		}
 	})
 
 	server := httptest.NewServer(handler)
@@ -148,7 +154,11 @@ func TestIntegration_CompleteFlow(t *testing.T) {
 	mpcSigner := signer.NewMPCKMSSigner(&testKMSClient{}, "test-key-id", testAddress, big.NewInt(1))
 
 	downstreamClient := newMockDownstreamClient()
-	defer downstreamClient.Close()
+	defer func() {
+		if err := downstreamClient.Close(); err != nil {
+			t.Errorf("Failed to close downstream client: %v", err)
+		}
+	}()
 
 	factory := NewRouterFactory(logger)
 	router := factory.CreateRouter(mpcSigner, downstreamClient)
@@ -292,7 +302,11 @@ func TestIntegration_BatchRequests(t *testing.T) {
 	mpcSigner := signer.NewMPCKMSSigner(&testKMSClient{}, "test-key-id", testAddress, big.NewInt(1))
 
 	downstreamClient := newMockDownstreamClient()
-	defer downstreamClient.Close()
+	defer func() {
+		if err := downstreamClient.Close(); err != nil {
+			t.Errorf("Failed to close downstream client: %v", err)
+		}
+	}()
 
 	factory := NewRouterFactory(logger)
 	router := factory.CreateRouter(mpcSigner, downstreamClient)
