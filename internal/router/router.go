@@ -37,6 +37,15 @@ func NewRouter(logger *logrus.Logger) *Router {
 	}
 }
 
+// NewRouterWithContext 创建新的 JSON-RPC 路由器,使用 Entry 类型 logger
+func NewRouterWithContext(logger *logrus.Entry) *Router {
+	return &Router{
+		handlers:       make(map[string]Handler),
+		defaultHandler: nil,
+		logger:         logger.Logger,
+	}
+}
+
 // SetDefaultHandler 设置默认处理器
 func (r *Router) SetDefaultHandler(handler Handler) {
 	r.mu.Lock()
@@ -72,6 +81,55 @@ func (r *Router) Unregister(method string) {
 
 	delete(r.handlers, method)
 	r.logger.WithField("method", method).Info("Unregistered JSON-RPC handler")
+}
+
+// RouteWithContext 路由单个请求,使用传入的logger
+func (r *Router) RouteWithContext(ctx context.Context, request *jsonrpc.Request, logger *logrus.Entry) *jsonrpc.Response {
+	if request == nil {
+		return jsonrpc.NewErrorResponse(nil, jsonrpc.InvalidRequestError)
+	}
+
+	logger.WithFields(logrus.Fields{
+		"method": request.Method,
+		"id":     request.ID,
+	}).Info("Routing request")
+
+	handler, found := r.getHandler(request.Method)
+	if !found {
+		if r.defaultHandler != nil {
+			logger.WithField("method", request.Method).Debug("Using default handler")
+			handler = r.defaultHandler
+		} else {
+			logger.WithField("method", request.Method).Warn("Method not found")
+			return jsonrpc.NewErrorResponse(request.ID, jsonrpc.MethodNotFoundError)
+		}
+	}
+
+	response, err := handler.Handle(ctx, request)
+	if err != nil {
+		logger.WithError(err).Error("Handler execution failed")
+
+		if jsonErr, ok := err.(*jsonrpc.Error); ok {
+			return jsonrpc.NewErrorResponse(request.ID, jsonErr)
+		}
+
+		return jsonrpc.NewErrorResponse(request.ID, jsonrpc.NewServerError(
+			jsonrpc.CodeInternalError,
+			"Internal server error",
+			err.Error(),
+		))
+	}
+
+	if response == nil {
+		logger.Error("Handler returned nil response")
+		return jsonrpc.NewErrorResponse(request.ID, jsonrpc.InternalError)
+	}
+
+	response.ID = request.ID
+	response.JSONRPC = jsonrpc.JSONRPCVersion
+
+	logger.Debug("Request routed successfully")
+	return response
 }
 
 // Route 路由单个请求
@@ -183,6 +241,51 @@ func (r *Router) GetRegisteredMethods() []string {
 func (r *Router) HasHandler(method string) bool {
 	_, found := r.getHandler(method)
 	return found
+}
+
+// HandleHTTPRequestWithContext 处理HTTP请求并传递带上下文的logger
+func (r *Router) HandleHTTPRequestWithContext(w http.ResponseWriter, req *http.Request, logger *logrus.Entry) {
+	body, err := io.ReadAll(req.Body)
+	if err != nil {
+		logger.WithError(err).Error("Failed to read request body")
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		if _, err := w.Write([]byte(`{"jsonrpc":"2.0","error":{"code":-32700,"message":"Parse error"},"id":null}`)); err != nil {
+			logger.WithError(err).Error("Failed to write error response")
+		}
+		return
+	}
+
+	requests, err := jsonrpc.ParseRequest(body)
+	if err != nil {
+		logger.WithError(err).Warn("Failed to parse JSON-RPC request")
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		resp := jsonrpc.NewErrorResponse(nil, jsonrpc.ParseError)
+		data, _ := jsonrpc.MarshalResponse(resp)
+		if _, err := w.Write(data); err != nil {
+			logger.WithError(err).Error("Failed to write error response")
+		}
+		return
+	}
+
+	responses := make([]*jsonrpc.Response, 0, len(requests))
+	for i := range requests {
+		resp := r.RouteWithContext(context.Background(), &requests[i], logger)
+		responses = append(responses, resp)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	data, err := jsonrpc.MarshalResponses(responses)
+	if err != nil {
+		logger.WithError(err).Error("Failed to marshal JSON-RPC responses")
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	if _, err := w.Write(data); err != nil {
+		logger.WithError(err).Error("Failed to write response")
+	}
 }
 
 // HandleHTTPRequest 处理HTTP请求（用于集成到HTTP服务器）
