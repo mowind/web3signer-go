@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"net/url"
 	"strings"
 )
 
@@ -112,32 +113,13 @@ func (c *DownstreamConfig) BuildURL() string {
 }
 
 // hasPort 检查URL是否已经包含端口
-func hasPort(url string) bool {
-	// 简单的端口检查逻辑
-	// 移除协议部分
-	url = strings.TrimPrefix(url, "http://")
-	url = strings.TrimPrefix(url, "https://")
-
-	// 查找最后一个冒号（可能是端口分隔符）
-	lastColon := strings.LastIndex(url, ":")
-	if lastColon == -1 {
+func hasPort(urlStr string) bool {
+	// 使用标准库解析 URL
+	u, err := url.Parse(urlStr)
+	if err != nil {
 		return false
 	}
-
-	// 检查冒号后的部分是否为数字
-	portPart := url[lastColon+1:]
-	// 检查是否包含路径分隔符
-	if strings.Contains(portPart, "/") {
-		return false
-	}
-
-	// 尝试解析为端口号
-	for _, ch := range portPart {
-		if ch < '0' || ch > '9' {
-			return false
-		}
-	}
-	return true
+	return u.Port() != ""
 }
 
 // LogConfig 定义日志配置

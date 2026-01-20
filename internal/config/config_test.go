@@ -344,7 +344,7 @@ func TestHasPort(t *testing.T) {
 		{
 			name:     "URL with port and path",
 			url:      "http://localhost:8080/api",
-			expected: false, // hasPort returns false because portPart is "8080/api" which contains "/"
+			expected: true, // net/url.Parse correctly extracts port 8080
 		},
 		{
 			name:     "URL with colon in path",
@@ -359,7 +359,7 @@ func TestHasPort(t *testing.T) {
 		{
 			name:     "URL with port-like segment in path",
 			url:      "http://localhost/api:8080",
-			expected: true, // hasPort returns true because last colon is before "8080"
+			expected: false, // net/url.Parse correctly treats this as path, not port
 		},
 		{
 			name:     "Empty URL",
