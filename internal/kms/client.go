@@ -7,75 +7,37 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/mowind/web3signer-go/internal/config"
 	"github.com/sirupsen/logrus"
 )
 
-// newLogger 创建新的日志记录器
-func newLogger(level, format string) *logrus.Logger {
-	logger := logrus.New()
-
-	// 设置日志级别
-	logLevel, err := logrus.ParseLevel(level)
-	if err != nil {
-		logLevel = logrus.InfoLevel
-	}
-	logger.SetLevel(logLevel)
-
-	// 设置日志格式
-	switch strings.ToLower(format) {
-	case config.LogFormatJSON:
-		logger.SetFormatter(&logrus.JSONFormatter{})
-	case config.LogFormatText:
-		logger.SetFormatter(&logrus.TextFormatter{
-			FullTimestamp: true,
-		})
-	default:
-		// 默认使用 text 格式
-		logger.SetFormatter(&logrus.TextFormatter{
-			FullTimestamp: true,
-		})
-	}
-
-	return logger
-}
-
-// Client 表示 MPC-KMS 客户端
 type Client struct {
 	kmsConfig  *config.KMSConfig
-	logConfig  *config.LogConfig
 	httpClient HTTPClientInterface
 	logger     *logrus.Logger
 }
 
-// NewClient 创建新的 MPC-KMS 客户端
-func NewClient(kmsCfg *config.KMSConfig, logCfg *config.LogConfig) *Client {
+func NewClient(kmsCfg *config.KMSConfig, logger *logrus.Logger) *Client {
 	return &Client{
 		kmsConfig:  kmsCfg,
-		logConfig:  logCfg,
-		httpClient: NewHTTPClient(kmsCfg, logCfg),
-		logger:     newLogger(logCfg.Level, logCfg.Format),
+		httpClient: NewHTTPClient(kmsCfg, logger),
+		logger:     logger,
 	}
 }
 
-// NewClientWithHTTPClient 创建新的 MPC-KMS 客户端，使用指定的 HTTP 客户端
-func NewClientWithHTTPClient(kmsCfg *config.KMSConfig, logCfg *config.LogConfig, httpClient HTTPClientInterface) *Client {
+func NewClientWithHTTPClient(kmsCfg *config.KMSConfig, logger *logrus.Logger, httpClient HTTPClientInterface) *Client {
 	return &Client{
 		kmsConfig:  kmsCfg,
-		logConfig:  logCfg,
 		httpClient: httpClient,
-		logger:     newLogger(logCfg.Level, logCfg.Format),
+		logger:     logger,
 	}
 }
 
-// NewClientWithLogger 创建新的 MPC-KMS 客户端，使用指定的日志记录器（测试用）
-func NewClientWithLogger(kmsCfg *config.KMSConfig, logCfg *config.LogConfig, httpClient HTTPClientInterface, logger *logrus.Logger) *Client {
+func NewClientWithLogger(kmsCfg *config.KMSConfig, logger *logrus.Logger, httpClient HTTPClientInterface) *Client {
 	return &Client{
 		kmsConfig:  kmsCfg,
-		logConfig:  logCfg,
 		httpClient: httpClient,
 		logger:     logger,
 	}

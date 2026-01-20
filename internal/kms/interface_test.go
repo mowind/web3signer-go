@@ -9,12 +9,11 @@ import (
 	"github.com/mowind/web3signer-go/internal/config"
 )
 
-// mockClient 模拟 MPC-KMS 客户端
 type mockClient struct {
-	signFunc            func(ctx context.Context, keyID string, message []byte) ([]byte, error)
-	signWithOptionsFunc func(ctx context.Context, keyID string, message []byte, encoding DataEncoding, summary *SignSummary, callbackURL string) ([]byte, error)
-	getTaskResultFunc   func(ctx context.Context, taskID string) (*TaskResult, error)
-	waitForTaskFunc     func(ctx context.Context, taskID string, interval time.Duration) (*TaskResult, error)
+	signFunc                  func(ctx context.Context, keyID string, message []byte) ([]byte, error)
+	signWithOptionsFunc       func(ctx context.Context, keyID string, message []byte, encoding DataEncoding, summary *SignSummary, callbackURL string) ([]byte, error)
+	getTaskResultFunc         func(ctx context.Context, taskID string) (*TaskResult, error)
+	waitForTaskCompletionFunc func(ctx context.Context, taskID string, interval time.Duration) (*TaskResult, error)
 }
 
 func (m *mockClient) Sign(ctx context.Context, keyID string, message []byte) ([]byte, error) {
@@ -39,8 +38,8 @@ func (m *mockClient) GetTaskResult(ctx context.Context, taskID string) (*TaskRes
 }
 
 func (m *mockClient) WaitForTaskCompletion(ctx context.Context, taskID string, interval time.Duration) (*TaskResult, error) {
-	if m.waitForTaskFunc != nil {
-		return m.waitForTaskFunc(ctx, taskID, interval)
+	if m.waitForTaskCompletionFunc != nil {
+		return m.waitForTaskCompletionFunc(ctx, taskID, interval)
 	}
 	return nil, nil
 }
@@ -169,7 +168,7 @@ func TestNewMPCKMSSigner(t *testing.T) {
 		KeyID:       "test-key-id",
 	}
 
-	client := NewClient(cfg, defaultLogConfig())
+	client := NewClient(cfg, defaultLogger())
 	signer := NewMPCKMSSigner(client, cfg.KeyID)
 
 	if signer == nil {
@@ -197,7 +196,7 @@ func TestInterfaceImplementation(t *testing.T) {
 		KeyID:       "test-key-id",
 	}
 
-	client := NewClient(cfg, defaultLogConfig())
+	client := NewClient(cfg, defaultLogger())
 	signer := NewMPCKMSSigner(client, cfg.KeyID)
 
 	// 类型断言验证

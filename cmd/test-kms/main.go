@@ -10,6 +10,7 @@ import (
 
 	"github.com/mowind/web3signer-go/internal/config"
 	"github.com/mowind/web3signer-go/internal/kms"
+	"github.com/sirupsen/logrus"
 )
 
 func main() {
@@ -28,14 +29,14 @@ func main() {
 	fmt.Printf("SecretKey: [REDACTED]\n")
 	fmt.Println()
 
-	// 创建日志配置
-	logConfig := &config.LogConfig{
-		Level:  "debug",
-		Format: "text",
-	}
+	logger := logrus.New()
+	logger.SetLevel(logrus.DebugLevel)
+	logger.SetFormatter(&logrus.TextFormatter{
+		FullTimestamp:   true,
+		TimestampFormat: "2006-01-02 15:04:05",
+	})
 
-	// 创建KMS客户端
-	client := kms.NewClient(kmsConfig, logConfig)
+	client := kms.NewClient(kmsConfig, logger)
 
 	// 测试1: 测试签名请求构建
 	fmt.Println("测试1: 测试签名请求构建")
@@ -66,21 +67,20 @@ func main() {
 }
 
 func testSignRequest(kmsConfig *config.KMSConfig) error {
-	// 创建一个测试请求
 	testData := []byte(`{"data": "test", "encoding": "PLAIN"}`)
 	req, err := http.NewRequest("POST", kmsConfig.Endpoint+"/api/v1/keys/test/sign", bytes.NewReader(testData))
 	if err != nil {
 		return fmt.Errorf("创建请求失败: %w", err)
 	}
 
-	// 创建日志配置
-	logConfig := &config.LogConfig{
-		Level:  "debug",
-		Format: "text",
-	}
+	logger := logrus.New()
+	logger.SetLevel(logrus.DebugLevel)
+	logger.SetFormatter(&logrus.TextFormatter{
+		FullTimestamp:   true,
+		TimestampFormat: "2006-01-02 15:04:05",
+	})
 
-	// 创建 HTTP 客户端进行签名
-	httpClient := kms.NewHTTPClient(kmsConfig, logConfig)
+	httpClient := kms.NewHTTPClient(kmsConfig, logger)
 
 	// 签名请求
 	if err := httpClient.SignRequest(req, testData); err != nil {

@@ -11,23 +11,19 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-// HTTPClient 处理 MPC-KMS HTTP 请求签名和执行
 type HTTPClient struct {
 	kmsConfig  *config.KMSConfig
-	logConfig  *config.LogConfig
 	httpClient *http.Client
 	logger     *logrus.Logger
 }
 
-// NewHTTPClient 创建新的 HTTP 客户端
-func NewHTTPClient(kmsCfg *config.KMSConfig, logCfg *config.LogConfig) *HTTPClient {
+func NewHTTPClient(kmsCfg *config.KMSConfig, logger *logrus.Logger) *HTTPClient {
 	return &HTTPClient{
 		kmsConfig: kmsCfg,
-		logConfig: logCfg,
 		httpClient: &http.Client{
 			Timeout: 30 * time.Second,
 		},
-		logger: newLogger(logCfg.Level, logCfg.Format),
+		logger: logger,
 	}
 }
 

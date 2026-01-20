@@ -11,7 +11,18 @@ import (
 
 	"github.com/mowind/web3signer-go/internal/config"
 	"github.com/mowind/web3signer-go/internal/kms"
+	"github.com/sirupsen/logrus"
 )
+
+func testLogger() *logrus.Logger {
+	logger := logrus.New()
+	logger.SetLevel(logrus.InfoLevel)
+	logger.SetFormatter(&logrus.TextFormatter{
+		FullTimestamp:   true,
+		TimestampFormat: "2006-01-02 15:04:05",
+	})
+	return logger
+}
 
 func TestTestSignRequest(t *testing.T) {
 	// Test the testSignRequest function
@@ -39,12 +50,9 @@ func TestTestActualSign(t *testing.T) {
 		KeyID:       "test-key-id",
 	}
 
-	logConfig := &config.LogConfig{
-		Level:  config.LogLevelInfo,
-		Format: config.LogFormatText,
-	}
+	logger := testLogger()
 
-	client := kms.NewClient(kmsConfig, logConfig)
+	client := kms.NewClient(kmsConfig, logger)
 
 	// Test the testActualSign function
 	err := testActualSign(client, kmsConfig)
@@ -63,14 +71,11 @@ func TestTestErrorHandling(t *testing.T) {
 		KeyID:       "test-key-id",
 	}
 
-	logConfig := &config.LogConfig{
-		Level:  config.LogLevelInfo,
-		Format: config.LogFormatText,
-	}
+	logger := testLogger()
 
-	client := kms.NewClient(kmsConfig, logConfig)
+	client := kms.NewClient(kmsConfig, logger)
 
-	// Test the testErrorHandling function
+	// Test to testErrorHandling function
 	err := testErrorHandling(client, kmsConfig)
 	if err != nil {
 		t.Errorf("testErrorHandling should not return error, got: %v", err)

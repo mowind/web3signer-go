@@ -16,14 +16,17 @@ import (
 	"time"
 
 	"github.com/mowind/web3signer-go/internal/config"
+	"github.com/sirupsen/logrus"
 )
 
-// defaultLogConfig 返回测试用的默认日志配置
-func defaultLogConfig() *config.LogConfig {
-	return &config.LogConfig{
-		Level:  config.LogLevelDebug, // 测试时使用 debug 级别以便看到所有日志
-		Format: config.LogFormatText, // 默认使用 text 格式
-	}
+func defaultLogger() *logrus.Logger {
+	logger := logrus.New()
+	logger.SetLevel(logrus.DebugLevel)
+	logger.SetFormatter(&logrus.TextFormatter{
+		FullTimestamp:   true,
+		TimestampFormat: "2006-01-02 15:04:05",
+	})
+	return logger
 }
 
 func TestCalculateContentSHA256(t *testing.T) {
@@ -175,7 +178,7 @@ func TestClient_SignRequest(t *testing.T) {
 		KeyID:       "test-key-id",
 	}
 
-	httpClient := NewHTTPClient(cfg, defaultLogConfig())
+	httpClient := NewHTTPClient(cfg, defaultLogger())
 
 	tests := []struct {
 		name        string
@@ -279,7 +282,7 @@ func TestHTTPClient_Do(t *testing.T) {
 		KeyID:       "test-key-id",
 	}
 
-	httpClient := NewHTTPClient(cfg, defaultLogConfig())
+	httpClient := NewHTTPClient(cfg, defaultLogger())
 
 	// 创建一个测试请求
 	body := []byte(`{"data": "test data", "encoding": "PLAIN"}`)
@@ -334,7 +337,7 @@ func TestClient_Sign(t *testing.T) {
 		KeyID:       "test-key-id",
 	}
 
-	client := NewClient(cfg, defaultLogConfig())
+	client := NewClient(cfg, defaultLogger())
 
 	// 创建mock服务器
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -441,7 +444,7 @@ func TestClient_SignWithOptions(t *testing.T) {
 		KeyID:       "test-key-id",
 	}
 
-	client := NewClient(cfg, defaultLogConfig())
+	client := NewClient(cfg, defaultLogger())
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		authHeader := r.Header.Get("Authorization")
@@ -505,7 +508,7 @@ func TestClient_GetTaskResult(t *testing.T) {
 		KeyID:       "test-key-id",
 	}
 
-	client := NewClient(cfg, defaultLogConfig())
+	client := NewClient(cfg, defaultLogger())
 
 	// 创建mock服务器
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -593,7 +596,7 @@ func TestClient_WaitForTaskCompletion(t *testing.T) {
 		KeyID:       "test-key-id",
 	}
 
-	client := NewClient(cfg, defaultLogConfig())
+	client := NewClient(cfg, defaultLogger())
 
 	// 创建mock服务器，模拟任务从PENDING到COMPLETED的状态变化
 	callCount := 0
@@ -677,7 +680,7 @@ func TestClient_SignWithOptions_MoreCases(t *testing.T) {
 		KeyID:       "test-key-id",
 	}
 
-	client := NewClient(cfg, defaultLogConfig())
+	client := NewClient(cfg, defaultLogger())
 
 	t.Run("sign with callback URL", func(t *testing.T) {
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

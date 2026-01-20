@@ -51,7 +51,7 @@ func (b *Builder) Build() *Server {
 
 	logger.WithField("chainId", chainID).Info("Retrieved chainId from downstream")
 
-	kmsClient := kms.NewClient(&b.cfg.KMS, &b.cfg.Log)
+	kmsClient := kms.NewClient(&b.cfg.KMS, logger)
 	kmsAddress := ethgo.HexToAddress(b.cfg.KMS.Address)
 	mpcSigner := signer.NewMPCKMSSigner(kmsClient, b.cfg.KMS.KeyID, kmsAddress, chainID)
 
