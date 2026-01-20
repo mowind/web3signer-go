@@ -7,7 +7,6 @@ import (
 	"math/big"
 
 	"github.com/mowind/web3signer-go/internal/kms"
-	"github.com/sirupsen/logrus"
 	"github.com/umbracle/ethgo"
 	"github.com/umbracle/fastrlp"
 )
@@ -105,30 +104,16 @@ func (s *MPCKMSSigner) SignTransaction(tx *ethgo.Transaction) (*ethgo.Transactio
 		signedTx.AccessList = tx.AccessList
 	}
 
-	// 记录原始交易信息
-	originalFields := logrus.Fields{
-		"original_nonce":    tx.Nonce,
-		"original_gas":      tx.Gas,
-		"original_gasPrice": tx.GasPrice,
-		"original_type":     tx.Type,
-	}
+	// 使用内部签名方法
+	return s.signTransactionInternal(signedTx, func(hash []byte) ([]byte, error) {
+		return s.Sign(hash)
+	})
+}
 
-	if tx.ChainID != nil {
-		originalFields["original_chainID"] = tx.ChainID.String()
-	}
-	if tx.MaxFeePerGas != nil {
-		originalFields["original_maxFeePerGas"] = tx.MaxFeePerGas.String()
-	}
-	if tx.MaxPriorityFeePerGas != nil {
-		originalFields["original_maxPriorityFeePerGas"] = tx.MaxPriorityFeePerGas.String()
-	}
-
-	logrus.WithFields(originalFields).Info("Original transaction before signing")
-
-	hash := s.signHash(signedTx)
-	logrus.WithField("hash", hex.EncodeToString(hash)).Info("Transaction hash for signing")
-
-	signature, err := s.Sign(hash)
+// signTransactionInternal 内部签名逻辑，处理签名应用
+func (s *MPCKMSSigner) signTransactionInternal(tx *ethgo.Transaction, signFunc func([]byte) ([]byte, error)) (*ethgo.Transaction, error) {
+	hash := s.signHash(tx)
+	signature, err := signFunc(hash)
 	if err != nil {
 		return nil, fmt.Errorf("failed to sign transaction: %v", err)
 	}
@@ -137,83 +122,24 @@ func (s *MPCKMSSigner) SignTransaction(tx *ethgo.Transaction) (*ethgo.Transactio
 		return nil, fmt.Errorf("invalid signature length: expected 65, got %d", len(signature))
 	}
 
-	logrus.WithFields(logrus.Fields{
-		"signature_length": len(signature),
-		"signature_v":      signature[64],
-	}).Info("Received signature from KMS")
+	tx.R = s.trimBytesZeros(signature[0:32])
+	tx.S = s.trimBytesZeros(signature[32:64])
 
-	rTrimmed := s.trimBytesZeros(signature[0:32])
-	sTrimmed := s.trimBytesZeros(signature[32:64])
-	signedTx.R = rTrimmed
-	signedTx.S = sTrimmed
+	// 使用 big.Int 计算 V 值，防止 chainID 增长导致的溢出
+	vBigInt := new(big.Int).SetUint64(uint64(signature[64]))
 
-	vv := uint64(signature[64])
-	chainID := uint64(0)
-	if s.chainID != nil {
-		chainID = s.chainID.Uint64()
+	if tx.Type == ethgo.TransactionLegacy {
+		// Legacy 交易: v = signature_v + 35 + chainID * 2
+		vBigInt.Add(vBigInt, big.NewInt(35))
+		if s.chainID != nil {
+			chainIDBigInt := new(big.Int).Mul(s.chainID, big.NewInt(2))
+			vBigInt.Add(vBigInt, chainIDBigInt)
+		}
 	}
 
-	logrus.WithFields(logrus.Fields{
-		"signature_v_raw": vv,
-		"chainID":         chainID,
-		"tx_type":         signedTx.Type,
-	}).Info("Signature parameters")
+	tx.V = vBigInt.Bytes()
 
-	if signedTx.Type == ethgo.TransactionLegacy {
-		vv = vv + 35 + chainID*2
-		logrus.WithField("final_v", vv).Info("Calculated final V for legacy transaction")
-	}
-
-	vBytes := new(big.Int).SetUint64(vv).Bytes()
-	signedTx.V = vBytes
-
-	// 准备日志字段
-	fields := logrus.Fields{
-		"tx_type":         signedTx.Type,
-		"nonce":           signedTx.Nonce,
-		"gas":             signedTx.Gas,
-		"gasPrice":        signedTx.GasPrice,
-		"signature_R":     hex.EncodeToString(signedTx.R),
-		"signature_S":     hex.EncodeToString(signedTx.S),
-		"signature_V":     hex.EncodeToString(signedTx.V),
-		"signature_V_len": len(signedTx.V),
-		"from":            signedTx.From.String(),
-	}
-
-	// 处理指针字段
-	if signedTx.To != nil {
-		fields["to"] = signedTx.To.String()
-	} else {
-		fields["to"] = nil
-	}
-
-	if signedTx.Value != nil {
-		fields["value"] = signedTx.Value.String()
-	} else {
-		fields["value"] = "0"
-	}
-
-	if signedTx.ChainID != nil {
-		fields["chainID"] = signedTx.ChainID.String()
-	} else {
-		fields["chainID"] = nil
-	}
-
-	if signedTx.MaxFeePerGas != nil {
-		fields["maxFeePerGas"] = signedTx.MaxFeePerGas.String()
-	} else {
-		fields["maxFeePerGas"] = nil
-	}
-
-	if signedTx.MaxPriorityFeePerGas != nil {
-		fields["maxPriorityFee"] = signedTx.MaxPriorityFeePerGas.String()
-	} else {
-		fields["maxPriorityFee"] = nil
-	}
-
-	logrus.WithFields(fields).Info("Signed transaction before RLP marshaling")
-
-	return signedTx, nil
+	return tx, nil
 }
 
 // signHash 计算交易的签名哈希
@@ -269,6 +195,12 @@ func (s *MPCKMSSigner) signHash(tx *ethgo.Transaction) []byte {
 }
 
 // trimBytesZeros 移除字节切片的前导零
+//
+// BUG(mowind): 这是 KMS 返回签名格式的补丁。KMS 返回 65 字节固定长度签名,
+// 但 RLP 编码需要去除前导零。应该在 KMS 客户端层面修复,而不是这里。
+//
+// TODO: 长期来看,应该在 KMS 客户端或 KMS 服务层面返回正确格式的签名,
+// 而不是在这里进行数据格式转换。
 func (s *MPCKMSSigner) trimBytesZeros(b []byte) []byte {
 	var i int
 	for i = 0; i < len(b); i++ {
@@ -287,45 +219,21 @@ func (s *MPCKMSSigner) SignTransactionWithSummary(tx *ethgo.Transaction, summary
 	txCopy := tx.Copy()
 	txCopy.From = s.address
 
-	hash := s.signHash(txCopy)
-
-	signatureHex, err := s.client.SignWithOptions(
-		context.Background(),
-		s.keyID,
-		hash,
-		kms.DataEncodingHex,
-		summary,
-		"",
-	)
-	if err != nil {
-		return nil, fmt.Errorf("failed to sign transaction with summary: %v", err)
-	}
-
-	signature, err := hex.DecodeString(string(signatureHex))
-	if err != nil {
-		return nil, fmt.Errorf("failed to decode signature: %v", err)
-	}
-
-	if len(signature) != 65 {
-		return nil, fmt.Errorf("invalid signature length: expected 65, got %d", len(signature))
-	}
-
-	txCopy.R = s.trimBytesZeros(signature[0:32])
-	txCopy.S = s.trimBytesZeros(signature[32:64])
-
-	vv := uint64(signature[64])
-	chainID := uint64(0)
-	if s.chainID != nil {
-		chainID = s.chainID.Uint64()
-	}
-
-	if txCopy.Type == ethgo.TransactionLegacy {
-		vv = vv + 35 + chainID*2
-	}
-
-	txCopy.V = new(big.Int).SetUint64(vv).Bytes()
-
-	return txCopy, nil
+	// 使用内部签名方法
+	return s.signTransactionInternal(txCopy, func(hash []byte) ([]byte, error) {
+		signatureHex, err := s.client.SignWithOptions(
+			context.Background(),
+			s.keyID,
+			hash,
+			kms.DataEncodingHex,
+			summary,
+			"",
+		)
+		if err != nil {
+			return nil, err
+		}
+		return hex.DecodeString(string(signatureHex))
+	})
 }
 
 // CreateTransferSummary 从交易创建转账摘要
