@@ -43,7 +43,7 @@ func TestCalculateContentSHA256(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := calculateContentSHA256(tt.input)
+			result := CalculateContentSHA256(tt.input)
 			if result != tt.expected && tt.name != "json data" {
 				t.Errorf("calculateContentSHA256(%q) = %q, want %q", tt.input, result, tt.expected)
 			}
@@ -80,7 +80,7 @@ func TestBuildSigningString(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := buildSigningString(tt.verb, tt.contentSHA256, tt.contentType, tt.date)
+			result := BuildSigningString(tt.verb, tt.contentSHA256, tt.contentType, tt.date)
 			if result != tt.expected {
 				t.Errorf("buildSigningString() = %q, want %q", result, tt.expected)
 			}
@@ -111,7 +111,7 @@ func TestCalculateHMACSHA256(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := calculateHMACSHA256(tt.message, tt.secret)
+			result := CalculateHMACSHA256(tt.message, tt.secret)
 			// 验证 base64 编码格式
 			_, err := base64.StdEncoding.DecodeString(result)
 			if err != nil {
@@ -151,7 +151,7 @@ func TestBuildAuthorizationHeader(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := buildAuthorizationHeader(tt.accessKeyID, tt.signature)
+			result := BuildAuthorizationHeader(tt.accessKeyID, tt.signature)
 			if result != tt.expected {
 				t.Errorf("buildAuthorizationHeader() = %q, want %q", result, tt.expected)
 			}
@@ -167,7 +167,7 @@ func TestClient_SignRequest(t *testing.T) {
 		KeyID:       "test-key-id",
 	}
 
-	client := NewClient(cfg)
+	httpClient := NewHTTPClient(cfg)
 
 	tests := []struct {
 		name        string
@@ -200,7 +200,7 @@ func TestClient_SignRequest(t *testing.T) {
 				req.Header.Set("Content-Type", tt.contentType)
 			}
 
-			err = client.SignRequest(req, tt.body)
+			err = httpClient.SignRequest(req, tt.body)
 			if err != nil {
 				t.Fatalf("SignRequest failed: %v", err)
 			}
@@ -263,7 +263,7 @@ func TestClient_SignRequest(t *testing.T) {
 	}
 }
 
-func TestClient_Do(t *testing.T) {
+func TestHTTPClient_Do(t *testing.T) {
 	cfg := &config.KMSConfig{
 		Endpoint:    "https://kms.example.com",
 		AccessKeyID: "AK1234567890",
@@ -271,7 +271,7 @@ func TestClient_Do(t *testing.T) {
 		KeyID:       "test-key-id",
 	}
 
-	client := NewClient(cfg)
+	httpClient := NewHTTPClient(cfg)
 
 	// 创建一个测试请求
 	body := []byte(`{"data": "test data", "encoding": "PLAIN"}`)
@@ -297,7 +297,7 @@ func TestClient_Do(t *testing.T) {
 	t.Run("invalid body read", func(t *testing.T) {
 		// 创建一个无法读取的请求体
 		req, _ := http.NewRequest("POST", "https://kms.example.com/api/v1/keys/test/sign", &errorReader{})
-		_, err := client.Do(req)
+		_, err := httpClient.Do(req)
 		if err == nil {
 			t.Error("Expected error for unreadable body")
 		}

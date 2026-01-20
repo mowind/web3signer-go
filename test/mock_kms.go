@@ -402,8 +402,8 @@ func (c *MockKMSClient) WaitForTaskCompletion(ctx context.Context, taskID string
 	}
 }
 
-// Do 执行 HTTP 请求
-func (c *MockKMSClient) Do(req *http.Request) (*http.Response, error) {
+// do 执行 HTTP 请求（内部方法）
+func (c *MockKMSClient) do(req *http.Request) (*http.Response, error) {
 	// 简单地将请求转发到 mock 服务器
 	return http.DefaultClient.Do(req)
 }
@@ -423,7 +423,7 @@ func (c *MockKMSClient) callSignEndpoint(keyID string, req kms.SignRequest) (*km
 	// 设置认证头
 	c.signRequest(httpReq, body)
 
-	resp, err := c.Do(httpReq)
+	resp, err := c.do(httpReq)
 	if err != nil {
 		return nil, err
 	}
@@ -460,7 +460,7 @@ func (c *MockKMSClient) callTaskEndpoint(keyID string, req kms.SignRequest) (*km
 	// 设置认证头
 	c.signRequest(httpReq, body)
 
-	resp, err := c.Do(httpReq)
+	resp, err := c.do(httpReq)
 	if err != nil {
 		return nil, err
 	}

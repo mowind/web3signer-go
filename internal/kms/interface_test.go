@@ -3,7 +3,6 @@ package kms
 import (
 	"context"
 	"encoding/json"
-	"net/http"
 	"testing"
 	"time"
 
@@ -16,7 +15,6 @@ type mockClient struct {
 	signWithOptionsFunc func(ctx context.Context, keyID string, message []byte, encoding DataEncoding, summary *SignSummary, callbackURL string) ([]byte, error)
 	getTaskResultFunc   func(ctx context.Context, taskID string) (*TaskResult, error)
 	waitForTaskFunc     func(ctx context.Context, taskID string, interval time.Duration) (*TaskResult, error)
-	doFunc              func(req *http.Request) (*http.Response, error)
 }
 
 func (m *mockClient) Sign(ctx context.Context, keyID string, message []byte) ([]byte, error) {
@@ -43,13 +41,6 @@ func (m *mockClient) GetTaskResult(ctx context.Context, taskID string) (*TaskRes
 func (m *mockClient) WaitForTaskCompletion(ctx context.Context, taskID string, interval time.Duration) (*TaskResult, error) {
 	if m.waitForTaskFunc != nil {
 		return m.waitForTaskFunc(ctx, taskID, interval)
-	}
-	return nil, nil
-}
-
-func (m *mockClient) Do(req *http.Request) (*http.Response, error) {
-	if m.doFunc != nil {
-		return m.doFunc(req)
 	}
 	return nil, nil
 }
