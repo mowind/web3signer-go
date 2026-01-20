@@ -3,6 +3,7 @@
 > 🚀 **A production-ready Go implementation of Web3 signer with MPC-KMS signing support**
 
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
+[![CI](https://github.com/mowind/web3signer-go/workflows/CI/CD%20Pipeline/badge.svg)](https://github.com/mowind/web3signer-go/actions)
 [![Go Report Card](https://goreportcard.com/badge/github.com/mowind/web3signer-go)](https://goreportcard.com/report/github.com/mowind/web3signer-go)
 [![GoDoc](https://godoc.org/github.com/mowind/web3signer-go?status.svg)](https://godoc.org/github.com/mowind/web3signer-go)
 
@@ -32,10 +33,13 @@ It provides a transparent HTTP JSON-RPC proxy that:
 - ✅ **Transaction Signing** - Supports `eth_sign`, `eth_signTransaction`, `eth_sendTransaction`
 - ✅ **Smart Contract Support** - EIP-1559 and legacy transaction types
 - ✅ **Downstream Forwarding** - Transparent proxy to Ethereum nodes
+- ✅ **Health Checks** - `/health` and `/ready` endpoints for monitoring
 - ✅ **CORS Support** - Configurable CORS headers for web applications
 - ✅ **Configuration Management** - CLI flags, config files, and environment variables
 - ✅ **Structured Logging** - Logrus-based logging with configurable levels
-- ✅ **Comprehensive Testing** - 100% coverage on core components
+- ✅ **Comprehensive Testing** - Unit tests and integration tests with high coverage
+- ✅ **Docker Support** - Multi-stage Dockerfile for production deployments
+- ✅ **CI/CD Pipeline** - Automated testing, linting, and security scanning
 
 ## Quick Start
 
@@ -46,6 +50,8 @@ It provides a transparent HTTP JSON-RPC proxy that:
 - Downstream JSON-RPC service (e.g., Ethereum node)
 
 ### Installation
+
+#### From Source
 
 ```bash
 # Clone the repository
@@ -58,6 +64,29 @@ make build
 # Or install directly
 go install ./cmd/web3signer/
 ```
+
+#### Using Docker
+
+```bash
+# Build the Docker image
+docker build -t web3signer:latest .
+
+# Run the container
+docker run -d \
+  --name web3signer \
+  -p 9000:9000 \
+  -e WEB3SIGNER_HTTP_HOST=0.0.0.0 \
+  -e WEB3SIGNER_HTTP_PORT=9000 \
+  -e WEB3SIGNER_KMS_ENDPOINT=http://kms.example.com:8080 \
+  -e WEB3SIGNER_KMS_ACCESS_KEY_ID=YOUR_ACCESS_KEY \
+  -e WEB3SIGNER_KMS_SECRET_KEY=YOUR_SECRET_KEY \
+  -e WEB3SIGNER_KMS_KEY_ID=YOUR_KEY_ID \
+  -e WEB3SIGNER_DOWNSTREAM_HTTP_HOST=http://localhost \
+  -e WEB3SIGNER_DOWNSTREAM_HTTP_PORT=8545 \
+  web3signer:latest
+```
+
+For detailed deployment instructions, see [DEPLOYMENT.md](DEPLOYMENT.md).
 
 ### Basic Usage
 
@@ -130,80 +159,111 @@ All other JSON-RPC methods are forwarded to the configured downstream service, i
 web3signer-go/
 ├── cmd/                    # Application entry points
 │   ├── web3signer/         # Main application
-│   └── test-kms/           # Test utilities
+│   └── test-kms/           # KMS test utilities
 ├── internal/               # Private application code
 │   ├── config/             # Configuration types and validation
-│   ├── kms/                # MPC-KMS client implementation
+│   ├── kms/                # MPC-KMS HTTP client
 │   ├── server/             # HTTP server with Gin
-│   ├── router/             # JSON-RPC routing
+│   ├── router/             # JSON-RPC routing and handlers
 │   ├── jsonrpc/            # JSON-RPC types and utilities
-│   ├── downstream/         # Downstream service client
-│   ├── signer/             # Signing logic
+│   ├── downstream/         # Downstream service HTTP client
+│   ├── signer/             # Signing logic (implements ethgo.Key)
 │   └── errors/             # Error types and handling
 ├── test/                   # Integration tests and mocks
-├── api/                    # API definitions
-├── configs/                # Configuration templates
 ├── scripts/                # Build and deployment scripts
-└── build/                  # Build output directory
+├── .github/                # GitHub workflows and CI/CD
+├── Dockerfile              # Multi-stage Docker build
+├── Makefile                # Build and test commands
+├── DEPLOYMENT.md           # Detailed deployment guide
+├── CLAUDE.md               # AI-assisted development context
+└── README.md               # This file
 ```
 
 ## Development
 
-### Building
+### Prerequisites
+
+- Go 1.25 or later
+- Docker (optional, for containerized deployment)
+- golangci-lint (install with `make install-tools`)
+
+### Build Commands
 
 ```bash
-# Build using Makefile
-make build          # Build to build/web3signer
-make clean          # Clean build artifacts
+# Build all binaries
+make build
 
-# Or use Go directly
-go build ./cmd/web3signer/
-go build -o web3signer ./cmd/web3signer/
+# Build specific binary
+go build -o web3signer ./cmd/web3signer
+
+# Clean build artifacts
+make clean
+
+# Check development environment
+make env
 ```
 
 ### Testing
 
 ```bash
 # Run all tests
-go test ./...
+make test
+
+# Run tests with coverage
+make test-coverage
+
+# Generate HTML coverage report
+make coverage
+
+# Run integration tests
+make integration-test
+
+# Run tests for specific package
+go test ./internal/kms/...
 
 # Run tests with verbose output
 go test -v ./...
 
 # Run tests with race detector
 go test -race ./...
-
-# Run tests for specific package
-go test ./internal/kms/...
-
-# Run single test
-go test -run TestClient_Sign
 ```
 
 ### Code Quality
 
 ```bash
 # Format code
-go fmt ./...
+make fmt
 
 # Run vet
-go vet ./...
+make vet
 
-# Clean dependencies
-go mod tidy
+# Run linter
+make lint
+
+# Tidy dependencies
+make tidy
+
+# Run all checks (test + lint)
+make check
+
+# Install development tools
+make install-tools
 ```
 
-### Running Tests
+### Using the Test KMS Tool
+
+The project includes a test KMS client for development:
 
 ```bash
-# Integration test with mock services
-go test ./test/...
+# Build the test-kms tool
+make build
 
-# Test KMS client
-go test ./internal/kms/...
-
-# Test JSON-RPC types
-go test ./internal/jsonrpc/...
+# Test a signing operation
+./build/test-kms \
+  --endpoint http://localhost:8080 \
+  --access-key-id YOUR_ACCESS_KEY \
+  --secret-key YOUR_SECRET_KEY \
+  --key-id YOUR_KEY_ID
 ```
 
 ## Configuration Reference
@@ -243,11 +303,26 @@ export WEB3SIGNER_KMS_KEY_ID=your_key_id
 ## API Documentation
 
 ### Health Endpoints
-- `GET /health` - Health check endpoint
-- `GET /ready` - Readiness check endpoint
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/health` | GET | Service health check |
+| `/ready` | GET | Service readiness check |
+
+**Response Example:**
+
+```json
+{
+  "status": "healthy",
+  "time": "2026-01-20T08:00:00Z"
+}
+```
 
 ### JSON-RPC Endpoint
-- `POST /` - JSON-RPC 2.0 endpoint
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/` | POST | JSON-RPC 2.0 endpoint |
 
 ### Supported Signing Methods
 
@@ -303,77 +378,6 @@ curl -X POST http://localhost:9000/ \
   }'
 ```
 
-### Forwarded Methods
-
-All other JSON-RPC methods are forwarded to the configured downstream service, including:
-- `eth_getBalance`
-- `eth_getTransactionCount`
-- `eth_call`
-- `eth_getBlockByNumber`
-- `net_version`
-- `web3_clientVersion`
-- And more...
-
-## License
-
-This project is licensed under the GNU General Public License v3.0 (GPLv3). See the [LICENSE](LICENSE) file for details.
-
-## Architecture
-
-```mermaid
-graph TB
-    Client[以太坊客户端 / DApp] -->|JSON-RPC| Web3Signer[web3signer-go]
-
-    subgraph Web3Signer
-        Router[JSON-RPC 路由器<br/>internal/router]
-        SignHandler[签名处理器<br/>router/sign_handler]
-        ForwardHandler[转发处理器<br/>router/forward_handler]
-        Config[配置管理<br/>internal/config]
-
-        Router -->|eth_sign/eth_signTransaction/<br/>eth_sendTransaction| SignHandler
-        Router -->|其他所有方法| ForwardHandler
-        Config --> Router
-    end
-
-    SignHandler -->|签名请求| MPCKMS[MPC-KMS 服务]
-    ForwardHandler -->|透传请求| Downstream[下游 Ethereum 节点]
-
-    MPCKMS -->|签名结果| SignHandler
-    Downstream -->|JSON-RPC 响应| ForwardHandler
-
-    SignHandler -->|JSON-RPC 响应| Client
-    ForwardHandler -->|JSON-RPC 响应| Client
-```
-
-### Project Structure
-
-```
-web3signer-go/
-├── cmd/                    # Application entry points
-│   ├── web3signer/         # Main application
-│   └── test-kms/           # KMS test utilities
-├── internal/               # Private application code
-│   ├── config/             # Configuration types and validation
-│   ├── kms/                # MPC-KMS HTTP client
-│   ├── signer/             # Signing logic (implements ethgo.Key)
-│   ├── server/             # HTTP server with Gin
-│   ├── router/             # JSON-RPC routing and handlers
-│   ├── jsonrpc/            # JSON-RPC types and utilities
-│   ├── downstream/         # Downstream service HTTP client
-│   └── errors/             # Error types and handling
-├── test/                   # Integration tests and mocks
-├── CLAUDE.md               # AI context documentation
-├── .claude/                # Claude Code configuration
-└── .bmad-core/             # BMad development workflow
-```
-
-### Module Documentation
-
-Each module has detailed documentation in `CLAUDE.md`:
-- **[`internal/kms/CLAUDE.md`](internal/kms/CLAUDE.md)** - MPC-KMS client implementation
-- **[`internal/router/CLAUDE.md`](internal/router/CLAUDE.md)** - JSON-RPC routing logic
-- **[`internal/signer/CLAUDE.md`](internal/signer/CLAUDE.md)** - Transaction signing
-
 ## Contributing
 
 We welcome contributions! Please see our development guidelines:
@@ -382,44 +386,38 @@ We welcome contributions! Please see our development guidelines:
 2. Create a feature branch (`git checkout -b feat/amazing-feature`)
 3. Make your changes
 4. Add tests for new functionality
-5. Ensure all tests pass (`make test`)
+5. Ensure all checks pass (`make check`)
 6. Commit with [Conventional Commits](https://www.conventionalcommits.org/)
 7. Push and create a pull request
 
-### Development Setup
+### Development Workflow
 
-#### Code Quality Tools
+```bash
+# 1. Fork and clone
+git clone https://github.com/YOUR_USERNAME/web3signer-go.git
+cd web3signer-go
 
-This project uses several code quality tools:
+# 2. Create feature branch
+git checkout -b feat/amazing-feature
 
-1. **golangci-lint** - Comprehensive Go linter
-   ```bash
-   make install-tools  # Install golangci-lint
-   make lint           # Run linter
-   ```
+# 3. Make changes and test
+make test
+make lint
 
-2. **Testing**
-   ```bash
-   make test           # Run tests
-   make test-coverage  # Run tests with coverage
-   make coverage       # Generate HTML coverage report
-   make integration-test  # Run integration tests
-   ```
+# 4. Commit your changes
+git add .
+git commit -m "feat(module): add amazing feature"
 
-3. **Code Quality**
-   ```bash
-   make fmt            # Format code
-   make vet            # Run go vet
-   make tidy           # Tidy dependencies
-   make check          # Run all checks (test + lint)
-   ```
+# 5. Push and create PR
+git push origin feat/amazing-feature
+```
 
-#### Code Style Guidelines
+### Code Style Guidelines
 
 - Follow standard Go conventions and [Effective Go](https://golang.org/doc/effective_go)
 - Run `make fmt` before committing
 - Ensure `make lint` passes without errors
-- Maintain test coverage >80% for core components
+- Maintain test coverage for all changes
 - Write clear, self-documenting code
 
 ### Commit Message Format
@@ -431,16 +429,34 @@ feat(kms): add support for multiple key IDs
 fix(signer): correct EIP-1559 transaction calculation
 docs(readme): update deployment instructions
 test(router): add integration test for batch requests
+ci(docker): optimize multi-stage build
 ```
 
 ## Roadmap
 
+### In Progress
 - [ ] Multi-key support (currently single key-id)
-- [ ] Asynchronous signing approval workflow
+- [ ] Asynchronous signing approval workflow (MPC-KMS task polling)
+
+### Planned
 - [ ] Prometheus metrics endpoint
-- [ ] Docker image and Kubernetes deployment
+- [ ] Kubernetes deployment manifests
 - [ ] Performance benchmarking
 - [ ] Webhook notifications for signing events
+- [ ] Enhanced logging and tracing support
+- [ ] Rate limiting and request throttling
+
+## Documentation
+
+- 📖 **[CLAUDE.md](CLAUDE.md)** - AI-assisted development context and architecture guide
+- 📦 **[DEPLOYMENT.md](DEPLOYMENT.md)** - Detailed deployment guide with Docker and production configurations
+- 🔧 **[API Documentation](#api-documentation)** - JSON-RPC endpoints and examples
+
+## Support
+
+- 🐛 **Bug Reports**: [GitHub Issues](https://github.com/mowind/web3signer-go/issues)
+- 💡 **Feature Requests**: [GitHub Discussions](https://github.com/mowind/web3signer-go/discussions)
+- 📧 **Security Issues**: Please report security vulnerabilities privately via GitHub's security advisory features
 
 ## License
 
@@ -450,15 +466,9 @@ This project is licensed under the GNU General Public License v3.0 (GPLv3). See 
 
 - Inspired by [Consensys/web3signer](https://github.com/Consensys/web3signer)
 - Built with [Gin](https://github.com/gin-gonic/gin) for HTTP routing
-- Uses [ethgo](https://github.com/ethereum/go-ethereum) for Ethereum utilities
+- Uses [ethgo](https://github.com/umbracle/ethgo) for Ethereum utilities
 - Configuration via [Cobra](https://github.com/spf13/cobra) and [Viper](https://github.com/spf13/viper)
 - Logging with [Logrus](https://github.com/sirupsen/logrus)
-
-## Support
-
-- 📖 **Documentation**: See [CLAUDE.md](CLAUDE.md) for AI-assisted development
-- 🐛 **Bug Reports**: [GitHub Issues](https://github.com/mowind/web3signer-go/issues)
-- 💡 **Feature Requests**: [GitHub Discussions](https://github.com/mowind/web3signer-go/discussions)
 
 ---
 
