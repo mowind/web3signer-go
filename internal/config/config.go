@@ -99,22 +99,17 @@ func (c *DownstreamConfig) Validate() error {
 // BuildURL 构建完整的下游服务URL
 func (c *DownstreamConfig) BuildURL() string {
 	baseURL := c.HTTPHost
-	// 如果指定了端口且端口大于0，添加到host中
 	if c.HTTPPort > 0 {
-		// 检查host是否已经包含端口
-		if !hasPort(baseURL) {
-			// 移除可能的尾部斜杠
+		u, err := url.Parse(baseURL)
+		if err == nil && u.Port() == "" {
 			baseURL = strings.TrimSuffix(baseURL, "/")
 			baseURL = fmt.Sprintf("%s:%d", baseURL, c.HTTPPort)
 		}
 	}
-	// 添加路径
 	return baseURL + c.HTTPPath
 }
 
-// hasPort 检查URL是否已经包含端口
 func hasPort(urlStr string) bool {
-	// 使用标准库解析 URL
 	u, err := url.Parse(urlStr)
 	if err != nil {
 		return false
