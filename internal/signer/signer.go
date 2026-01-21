@@ -195,12 +195,6 @@ func (s *MPCKMSSigner) signHash(tx *ethgo.Transaction) []byte {
 }
 
 // trimBytesZeros 移除字节切片的前导零
-//
-// BUG(mowind): 这是 KMS 返回签名格式的补丁。KMS 返回 65 字节固定长度签名,
-// 但 RLP 编码需要去除前导零。应该在 KMS 客户端层面修复,而不是这里。
-//
-// TODO: 长期来看,应该在 KMS 客户端或 KMS 服务层面返回正确格式的签名,
-// 而不是在这里进行数据格式转换。
 func (s *MPCKMSSigner) trimBytesZeros(b []byte) []byte {
 	var i int
 	for i = 0; i < len(b); i++ {
