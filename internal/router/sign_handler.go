@@ -20,7 +20,6 @@ import (
 type SignHandler struct {
 	*BaseHandler
 	signer        *signer.MPCKMSSigner
-	builder       *signer.TransactionBuilder
 	client        downstream.ClientInterface
 	downstreamRPC *ethgojsonrpc.Client
 }
@@ -35,7 +34,6 @@ func NewSignHandler(mpcSigner *signer.MPCKMSSigner, client downstream.ClientInte
 	return &SignHandler{
 		BaseHandler:   NewBaseHandler("sign", logger),
 		signer:        mpcSigner,
-		builder:       signer.NewTransactionBuilder(),
 		client:        client,
 		downstreamRPC: rpcClient,
 	}, nil
@@ -112,33 +110,27 @@ func (h *SignHandler) handleEthSign(ctx context.Context, request *internaljsonrp
 
 // handleEthSignTransaction 处理 eth_signTransaction 方法
 func (h *SignHandler) handleEthSignTransaction(ctx context.Context, request *internaljsonrpc.Request) (*internaljsonrpc.Response, error) {
-	txParams, err := signer.ParseTransactionParams(request.Params)
+	tx, err := signer.ParseJSONRPCTransaction(request.Params)
 	if err != nil {
 		h.logger.WithError(err).Warn("Failed to parse eth_signTransaction params")
 		return h.CreateInvalidParamsResponse(request.ID, fmt.Sprintf("Invalid transaction parameters: %v", err)), nil
 	}
 
 	h.logger.WithFields(logrus.Fields{
-		"from": txParams.From,
-		"to":   txParams.To,
+		"from": tx.From.String(),
+		"to":   tx.To,
 	}).Info("Signing transaction")
 
 	expectedAddress := h.signer.Address().String()
-	if !strings.EqualFold(txParams.From, expectedAddress) {
+	if tx.From.String() != "" && !strings.EqualFold(tx.From.String(), expectedAddress) {
 		h.logger.WithFields(logrus.Fields{
 			"expected": expectedAddress,
-			"provided": txParams.From,
+			"provided": tx.From.String(),
 		}).Warn("From address mismatch in eth_signTransaction")
 		return h.CreateInvalidParamsResponse(request.ID, "From address mismatch"), nil
 	}
 
-	tx, err := h.builder.BuildTransaction(*txParams)
-	if err != nil {
-		h.logger.WithError(err).Error("Failed to build transaction")
-		return h.CreateInvalidParamsResponse(request.ID, fmt.Sprintf("Failed to build transaction: %v", err)), nil
-	}
-
-	signedTx, err := h.signer.SignTransaction(tx)
+	signedTx, err := h.signer.SignTransaction(&tx.Transaction)
 	if err != nil {
 		h.logger.WithError(err).Error("Failed to sign transaction")
 		return h.CreateErrorResponse(request.ID, internaljsonrpc.CodeInternalError,
@@ -146,30 +138,30 @@ func (h *SignHandler) handleEthSignTransaction(ctx context.Context, request *int
 	}
 
 	h.logger.WithFields(logrus.Fields{
-		"from": txParams.From,
-		"to":   txParams.To,
+		"from": tx.From.String(),
+		"to":   tx.To,
 	}).Info("Transaction signed successfully")
 	return h.CreateSuccessResponse(request.ID, signedTx)
 }
 
 // handleEthSendTransaction 处理 eth_sendTransaction 方法
 func (h *SignHandler) handleEthSendTransaction(ctx context.Context, request *internaljsonrpc.Request) (*internaljsonrpc.Response, error) {
-	txParams, err := signer.ParseTransactionParams(request.Params)
+	tx, err := signer.ParseJSONRPCTransaction(request.Params)
 	if err != nil {
 		h.logger.WithError(err).Warn("Failed to parse eth_sendTransaction params")
 		return h.CreateInvalidParamsResponse(request.ID, fmt.Sprintf("Invalid transaction parameters: %v", err)), nil
 	}
 
 	h.logger.WithFields(logrus.Fields{
-		"from": txParams.From,
-		"to":   txParams.To,
+		"from": tx.From.String(),
+		"to":   tx.To,
 	}).Info("Sending transaction")
 
 	expectedAddress := h.signer.Address().String()
-	if !strings.EqualFold(txParams.From, expectedAddress) {
+	if tx.From.String() != "" && !strings.EqualFold(tx.From.String(), expectedAddress) {
 		h.logger.WithFields(logrus.Fields{
 			"expected": expectedAddress,
-			"provided": txParams.From,
+			"provided": tx.From.String(),
 		}).Warn("From address mismatch in eth_sendTransaction")
 		return h.CreateInvalidParamsResponse(request.ID, "From address mismatch"), nil
 	}
@@ -185,8 +177,8 @@ func (h *SignHandler) handleEthSendTransaction(ctx context.Context, request *int
 	h.logger.WithField("nonce", nonce).Debug("Retrieved nonce from downstream")
 
 	// 如果客户端没有提供 nonce，使用获取到的 nonce
-	if txParams.Nonce == "" {
-		txParams.Nonce = fmt.Sprintf("0x%x", nonce)
+	if tx.Nonce == 0 {
+		tx.Nonce = nonce
 	}
 
 	gasPrice, err := h.downstreamRPC.Eth().GasPrice()
@@ -198,57 +190,57 @@ func (h *SignHandler) handleEthSendTransaction(ctx context.Context, request *int
 
 	h.logger.WithField("gasPrice", gasPrice).Debug("Retrieved gasPrice from downstream")
 
-	if txParams.GasPrice == "" || txParams.GasPrice == "0" {
-		txParams.GasPrice = new(big.Int).SetUint64(gasPrice).String()
+	// 根据交易类型填充 gasPrice 或 maxFeePerGas/maxPriorityFeePerGas
+	switch tx.Type {
+	case ethgo.TransactionDynamicFee:
+		// EIP-1559: 如果未提供，使用 gasPrice 作为 maxFeePerGas 和 maxPriorityFeePerGas
+		if tx.MaxFeePerGas == nil || tx.MaxFeePerGas.Uint64() == 0 {
+			tx.MaxFeePerGas = new(big.Int).SetUint64(gasPrice)
+		}
+		if tx.MaxPriorityFeePerGas == nil || tx.MaxPriorityFeePerGas.Uint64() == 0 {
+			tx.MaxPriorityFeePerGas = new(big.Int).SetUint64(gasPrice)
+		}
+	case ethgo.TransactionLegacy, ethgo.TransactionAccessList:
+		// Legacy 或 EIP-2930: 如果未提供 gasPrice，使用获取到的值
+		if tx.GasPrice == 0 {
+			tx.GasPrice = gasPrice
+		}
 	}
 
 	// 如果客户端没有提供 gas 或 gas 为 0，进行 gas 估算
-	if txParams.Gas == "" || txParams.Gas == "0" {
+	if tx.Gas == 0 {
 		// 构建 CallMsg 用于 gas 估算
 		callMsg := &ethgo.CallMsg{
 			From:  h.signer.Address(),
 			Value: new(big.Int),
 		}
 
-		if txParams.To != "" {
-			to := ethgo.HexToAddress(txParams.To)
-			callMsg.To = &to
+		if tx.To != nil {
+			callMsg.To = tx.To
 		}
 
-		if txParams.Value != "" {
-			value := new(big.Int)
-			if _, ok := value.SetString(txParams.Value, 0); ok {
-				callMsg.Value = value
-			}
+		if tx.Value != nil {
+			callMsg.Value = tx.Value
 		}
 
-		if txParams.Data != "" {
-			data, err := hexToBytes(txParams.Data)
-			if err == nil {
-				callMsg.Data = data
-			}
+		if len(tx.Input) > 0 {
+			callMsg.Data = tx.Input
 		}
 
 		estimatedGas, err := h.downstreamRPC.Eth().EstimateGas(callMsg)
 		if err != nil {
 			h.logger.WithError(err).Warn("Failed to estimate gas, using default")
 			// 使用默认 gas 限制
-			txParams.Gas = "0x5208" // 21000 gas for simple transfer
+			tx.Gas = 21000 // 21000 gas for simple transfer
 		} else {
 			// 增加 20% 作为安全边界
 			estimatedGas = estimatedGas * 120 / 100
-			txParams.Gas = fmt.Sprintf("0x%x", estimatedGas)
+			tx.Gas = estimatedGas
 			h.logger.WithField("estimatedGas", estimatedGas).Debug("Estimated gas for transaction")
 		}
 	}
 
-	tx, err := h.builder.BuildTransaction(*txParams)
-	if err != nil {
-		h.logger.WithError(err).Error("Failed to build transaction")
-		return h.CreateInvalidParamsResponse(request.ID, fmt.Sprintf("Failed to build transaction: %v", err)), nil
-	}
-
-	signedTx, err := h.signer.SignTransaction(tx)
+	signedTx, err := h.signer.SignTransaction(&tx.Transaction)
 	if err != nil {
 		h.logger.WithError(err).Error("Failed to sign transaction")
 		return h.CreateErrorResponse(request.ID, internaljsonrpc.CodeInternalError,
@@ -293,31 +285,12 @@ func (h *SignHandler) handleEthSendTransaction(ctx context.Context, request *int
 	}
 
 	h.logger.WithFields(logrus.Fields{
-		"from": txParams.From,
-		"to":   txParams.To,
+		"from": tx.From.String(),
+		"to":   tx.To,
 	}).Info("Transaction sent successfully")
 	forwardResponse.ID = request.ID
 	forwardResponse.JSONRPC = internaljsonrpc.JSONRPCVersion
 	return forwardResponse, nil
-}
-
-// hexToBytes 将十六进制字符串转换为字节切片
-func hexToBytes(s string) ([]byte, error) {
-	if s == "" {
-		return nil, nil
-	}
-
-	// 移除 0x 前缀
-	if len(s) >= 2 && s[0:2] == "0x" {
-		s = s[2:]
-	}
-
-	// 如果长度为奇数，在前面补 0
-	if len(s)%2 != 0 {
-		s = "0" + s
-	}
-
-	return hex.DecodeString(s)
 }
 
 // IsSignMethod 检查是否为签名方法
