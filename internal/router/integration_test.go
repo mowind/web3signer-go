@@ -190,10 +190,10 @@ func TestIntegration_CompleteFlow(t *testing.T) {
 			params: json.RawMessage(`[{
 				"from": "0x1234567890123456789012345678901234567890",
 				"to": "0x0987654321098765432109876543210987654321",
-				"gas": "21000",
-				"gasPrice": "20000000000",
-				"value": "1000000000000000000",
-				"nonce": "5"
+				"gas": "0x5208",
+				"gasPrice": "0x4a817c800",
+				"value": "0xde0b6b3a7640000",
+				"nonce": "0x5"
 			}]`),
 			expectError: false,
 		},
@@ -203,10 +203,10 @@ func TestIntegration_CompleteFlow(t *testing.T) {
 			params: json.RawMessage(`[{
 				"from": "0x1234567890123456789012345678901234567890",
 				"to": "0x0987654321098765432109876543210987654321",
-				"gas": "21000",
-				"gasPrice": "20000000000",
-				"value": "1000000000000000000",
-				"nonce": "6"
+				"gas": "0x5208",
+				"gasPrice": "0x4a817c800",
+				"value": "0xde0b6b3a7640000",
+				"nonce": "0x6"
 			}]`),
 			expectError:    false,
 			expectedResult: "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
