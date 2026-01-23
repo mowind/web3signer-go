@@ -271,7 +271,8 @@ func (r *Router) HandleHTTPRequestWithContext(w http.ResponseWriter, req *http.R
 
 	responses := make([]*jsonrpc.Response, 0, len(requests))
 	for i := range requests {
-		resp := r.RouteWithContext(context.Background(), &requests[i], logger)
+		// 使用 HTTP 请求的 Context，保留超时控制和取消信号
+		resp := r.RouteWithContext(req.Context(), &requests[i], logger)
 		responses = append(responses, resp)
 	}
 
@@ -316,7 +317,8 @@ func (r *Router) HandleHTTPRequest(w http.ResponseWriter, req *http.Request) {
 
 	responses := make([]*jsonrpc.Response, 0, len(requests))
 	for i := range requests {
-		resp := r.Route(context.Background(), &requests[i])
+		// 使用 HTTP 请求的 Context，保留超时控制和取消信号
+		resp := r.Route(req.Context(), &requests[i])
 		responses = append(responses, resp)
 	}
 
