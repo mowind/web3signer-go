@@ -12,6 +12,7 @@ import (
 
 	"github.com/mowind/web3signer-go/internal/config"
 	"github.com/mowind/web3signer-go/internal/jsonrpc"
+	"github.com/sirupsen/logrus"
 )
 
 func TestNewClient(t *testing.T) {
@@ -66,7 +67,7 @@ func TestNewClient(t *testing.T) {
 				t.Fatalf("Config validation failed: %v", err)
 			}
 
-			client := NewClient(&configCopy)
+			client := NewClient(&configCopy, logrus.New())
 			if client == nil {
 				t.Fatal("NewClient returned nil")
 			}
@@ -440,7 +441,7 @@ func TestClient_GetEndpoint(t *testing.T) {
 			if err := configCopy.Validate(); err != nil {
 				t.Fatalf("Config validation failed: %v", err)
 			}
-			client := NewClient(&configCopy)
+			client := NewClient(&configCopy, logrus.New())
 			endpoint := client.GetEndpoint()
 			if endpoint != tt.expected {
 				t.Errorf("Expected endpoint: %s, got: %s", tt.expected, endpoint)
@@ -572,5 +573,5 @@ func newValidatedClient(t *testing.T, cfg *config.DownstreamConfig) *Client {
 	if err := configCopy.Validate(); err != nil {
 		t.Fatalf("Config validation failed: %v", err)
 	}
-	return NewClient(&configCopy)
+	return NewClient(&configCopy, logrus.New())
 }

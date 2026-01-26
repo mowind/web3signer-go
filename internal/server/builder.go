@@ -82,7 +82,7 @@ func (b *Builder) Build() *Server {
 	logger := b.createLogger()
 	b.logger = logger
 
-	downstreamClient := downstream.NewClient(&b.cfg.Downstream)
+	downstreamClient := downstream.NewClient(&b.cfg.Downstream, logger)
 
 	downstreamEndpoint := b.cfg.Downstream.BuildURL()
 	rpcClient, err := ethgojsonrpc.NewClient(downstreamEndpoint)

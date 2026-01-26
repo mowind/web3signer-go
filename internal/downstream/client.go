@@ -31,17 +31,18 @@ type Client struct {
 //
 // Parameters:
 //   - cfg: Downstream service configuration (host, port, path)
+//   - logger: Logger instance for logging ID mismatch warnings
 //
 // Returns:
 //   - *Client: A new downstream client instance
-func NewClient(cfg *config.DownstreamConfig) *Client {
+func NewClient(cfg *config.DownstreamConfig, logger *logrus.Logger) *Client {
 	return &Client{
 		config: cfg,
 		httpClient: &http.Client{
 			Timeout:   30 * time.Second,
 			Transport: createTransport(),
 		},
-		logger: logrus.StandardLogger(),
+		logger: logger,
 	}
 }
 
