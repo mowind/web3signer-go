@@ -10,13 +10,21 @@ import (
 )
 
 // ForwardHandler 处理转发到下游服务的 JSON-RPC 方法
+//
+// # ForwardHandler 处理转发到下游服务的 JSON-RPC 方法
+//
+// ForwardHandler 处理转发到下游服务的 JSON-RPC 方法
+//
+//lint:ignore SA1019 // downstream.ClientInterface is used for backward compatibility
+//lint:ignore SA1019 // downstream.ClientInterface is used for backward compatibility
+//lint:ignore SA1019 // downstream.ClientInterface is used for backward compatibility
 type ForwardHandler struct {
 	*BaseHandler
 	client downstream.ClientInterface
 }
 
 // NewForwardHandler 创建转发处理器
-func NewForwardHandler(client downstream.ClientInterface, logger *logrus.Logger) *ForwardHandler {
+func NewForwardHandler(client downstream.ClientInterface, logger *logrus.Logger) *ForwardHandler { //nolint:staticcheck // SA1019: backward compatibility
 	return &ForwardHandler{
 		BaseHandler: NewBaseHandler("forward", logger),
 		client:      client,

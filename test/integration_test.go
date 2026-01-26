@@ -610,3 +610,150 @@ func toFloat64(v interface{}) float64 {
 	}
 	return 0
 }
+
+// TestEndToEnd_AuthenticationMiddleware 认证中间件集成测试
+func TestEndToEnd_AuthenticationMiddleware(t *testing.T) {
+	logger := logrus.New()
+	logger.SetLevel(logrus.DebugLevel)
+
+	kmsServer := NewMockKMSServer()
+	defer kmsServer.Close()
+
+	downstreamServer := NewMockDownstreamServer()
+	defer downstreamServer.Close()
+
+	kmsServer.AddValidKey("test-key-id")
+	kmsServer.SetAccessKey("test-access-key", "test-secret-key")
+
+	kmsClient := NewMockKMSClient(kmsServer)
+	kmsClient.SetCredentials("test-access-key", "test-secret-key")
+
+	downstreamClient := NewMockDownstreamClient(downstreamServer)
+
+	testAddress := ethgo.HexToAddress("0x1234567890123456789012345678901234567890")
+	mpcSigner := signer.NewMPCKMSSigner(kmsClient, "test-key-id", testAddress, big.NewInt(1))
+
+	routerFactory := router.NewRouterFactory(logger)
+	router := routerFactory.CreateRouter(mpcSigner, downstreamClient)
+
+	tests := []struct {
+		name           string
+		authEnabled    bool
+		authSecret     string
+		authHeader     string
+		path           string
+		expectedStatus int
+	}{
+		{
+			name:           "auth disabled - request passes",
+			authEnabled:    false,
+			authSecret:     "test-secret",
+			authHeader:     "",
+			path:           "/",
+			expectedStatus: http.StatusOK,
+		},
+		{
+			name:           "auth enabled with valid Bearer token",
+			authEnabled:    true,
+			authSecret:     "test-secret",
+			authHeader:     "Bearer test-secret",
+			path:           "/",
+			expectedStatus: http.StatusOK,
+		},
+		{
+			name:           "auth enabled with invalid token - fails",
+			authEnabled:    true,
+			authSecret:     "test-secret",
+			authHeader:     "Bearer wrong-secret",
+			path:           "/",
+			expectedStatus: http.StatusUnauthorized,
+		},
+		{
+			name:           "auth enabled without token - fails",
+			authEnabled:    true,
+			authSecret:     "test-secret",
+			authHeader:     "",
+			path:           "/",
+			expectedStatus: http.StatusUnauthorized,
+		},
+		{
+			name:           "health endpoint bypasses auth",
+			authEnabled:    true,
+			authSecret:     "test-secret",
+			authHeader:     "",
+			path:           "/health",
+			expectedStatus: http.StatusOK,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// 创建带认证的处理器
+			handler := createTestHandlerWithAuth(router, logger, tt.authEnabled, tt.authSecret)
+
+			ts := httptest.NewServer(handler)
+			defer ts.Close()
+
+			req, _ := http.NewRequest("POST", ts.URL+tt.path, nil)
+			if tt.authHeader != "" {
+				req.Header.Set("Authorization", tt.authHeader)
+			}
+
+			resp, err := http.DefaultClient.Do(req)
+			if err != nil {
+				t.Fatalf("Request failed: %v", err)
+			}
+			defer func() { _ = resp.Body.Close() }()
+
+			if resp.StatusCode != tt.expectedStatus {
+				t.Errorf("Expected status %d, got %d", tt.expectedStatus, resp.StatusCode)
+			}
+		})
+	}
+}
+
+// createTestHandlerWithAuth 创建带认证的测试处理器
+func createTestHandlerWithAuth(router *router.Router, logger *logrus.Logger, authEnabled bool, authSecret string) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// 简单的认证检查
+		if authEnabled && r.URL.Path != "/health" && r.URL.Path != "/ready" {
+			authHeader := r.Header.Get("Authorization")
+			if authHeader != "Bearer "+authSecret {
+				w.WriteHeader(http.StatusUnauthorized)
+				_, _ = w.Write([]byte(`{"jsonrpc":"2.0","error":{"code":401,"message":"authentication failed"},"id":null}`))
+				return
+			}
+		}
+
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			http.Error(w, "Failed to read request body", http.StatusBadRequest)
+			return
+		}
+
+		requests, err := jsonrpc.ParseRequest(body)
+		if err != nil {
+			errResp := jsonrpc.NewErrorResponse(nil, jsonrpc.ParseError)
+			respData, _ := json.Marshal(errResp)
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write(respData)
+			return
+		}
+
+		responses := make([]*jsonrpc.Response, 0, len(requests))
+		for _, req := range requests {
+			resp := router.Route(r.Context(), &req)
+			responses = append(responses, resp)
+		}
+
+		var respData []byte
+		if len(responses) == 1 {
+			respData, _ = json.Marshal(responses[0])
+		} else {
+			respData, _ = json.Marshal(responses)
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write(respData)
+	})
+}

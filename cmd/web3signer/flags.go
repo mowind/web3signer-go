@@ -32,6 +32,30 @@ var flags = []Flag{
 		Description:  "HTTP server port",
 		BindTo:       "http.port",
 	},
+	{
+		Name:         "tls-cert-file",
+		DefaultValue: "",
+		Description:  "Path to TLS certificate file",
+		BindTo:       "http.tls-cert-file",
+	},
+	{
+		Name:         "tls-key-file",
+		DefaultValue: "",
+		Description:  "Path to TLS private key file",
+		BindTo:       "http.tls-key-file",
+	},
+	{
+		Name:         "tls-auto-redirect",
+		DefaultValue: false,
+		Description:  "Auto redirect HTTP to HTTPS",
+		BindTo:       "http.tls-auto-redirect",
+	},
+	{
+		Name:         "http-max-request-size",
+		DefaultValue: int64(10),
+		Description:  "Maximum request body size in MB (prevents DoS)",
+		BindTo:       "http.max-request-size-mb",
+	},
 
 	// MPC-KMS 配置
 	{
@@ -114,6 +138,10 @@ func registerFlags(cmd *cobra.Command) error {
 			cmd.Flags().String(flag.Name, v, flag.Description)
 		case int:
 			cmd.Flags().Int(flag.Name, v, flag.Description)
+		case int64:
+			cmd.Flags().Int64(flag.Name, v, flag.Description)
+		case bool:
+			cmd.Flags().Bool(flag.Name, v, flag.Description)
 		default:
 			return fmt.Errorf("unsupported flag type: %T for flag %s", v, flag.Name)
 		}

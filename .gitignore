@@ -34,5 +34,10 @@ build/
 # Editor/IDE
 # .idea/
 # .vscode/
+.claude
+.serena
+.sisyphus
+.spec-workflow
+.bmad-core
 
 gw-http-api.md

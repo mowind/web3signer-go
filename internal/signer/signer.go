@@ -11,7 +11,10 @@ import (
 	"github.com/umbracle/fastrlp"
 )
 
-// MPCKMSSigner 实现 ethgo.Key 接口，使用 MPC-KMS 进行签名
+// MPCKMSSigner implements ethgo.Key interface using MPC-KMS for signing.
+//
+// This signer wraps an MPC-KMS client to provide Ethereum key signing capabilities.
+// It handles transaction signing with proper EIP-1559 and EIP-2930 support.
 type MPCKMSSigner struct {
 	client  kms.ClientInterface
 	keyID   string
@@ -19,7 +22,16 @@ type MPCKMSSigner struct {
 	chainID *big.Int
 }
 
-// NewMPCKMSSigner 创建新的 MPC-KMS 签名器
+// NewMPCKMSSigner creates a new MPC-KMS signer instance.
+//
+// Parameters:
+//   - client: The MPC-KMS client for signing operations
+//   - keyID: The KMS key identifier for signing
+//   - address: The Ethereum address associated with the key
+//   - chainID: The chain ID for transaction signing (for EIP-1559)
+//
+// Returns:
+//   - *MPCKMSSigner: A new signer instance
 func NewMPCKMSSigner(client kms.ClientInterface, keyID string, address ethgo.Address, chainID *big.Int) *MPCKMSSigner {
 	return &MPCKMSSigner{
 		client:  client,
@@ -29,12 +41,27 @@ func NewMPCKMSSigner(client kms.ClientInterface, keyID string, address ethgo.Add
 	}
 }
 
-// Address 返回签名器的地址（实现 ethgo.Key 接口）
+// Address returns the signer's Ethereum address.
+//
+// This implements the ethgo.Key interface.
+//
+// Returns:
+//   - ethgo.Address: The address associated with this signer
 func (s *MPCKMSSigner) Address() ethgo.Address {
 	return s.address
 }
 
-// Sign 对哈希进行签名（实现 ethgo.Key 接口）
+// Sign signs a 32-byte hash using MPC-KMS.
+//
+// This implements the ethgo.Key interface for signing message hashes.
+// The hash should be the Keccak-256 hash of data to sign.
+//
+// Parameters:
+//   - hash: 32-byte hash to sign (typically Keccak-256)
+//
+// Returns:
+//   - []byte: 65-byte signature (r, s, v values)
+//   - error: An error if hash is invalid or signing fails
 func (s *MPCKMSSigner) Sign(hash []byte) ([]byte, error) {
 	if len(hash) != 32 {
 		return nil, fmt.Errorf("invalid hash length: expected 32 bytes, got %d", len(hash))
@@ -53,7 +80,17 @@ func (s *MPCKMSSigner) Sign(hash []byte) ([]byte, error) {
 	return signature, nil
 }
 
-// SignTransaction 对交易进行签名
+// SignTransaction signs an Ethereum transaction.
+//
+// This method creates a copy of the transaction, computes its hash,
+// signs it using MPC-KMS, and applies the signature (r, s, v values).
+//
+// Parameters:
+//   - tx: The transaction to sign
+//
+// Returns:
+//   - *ethgo.Transaction: A new transaction with signature applied
+//   - error: An error if signing fails
 func (s *MPCKMSSigner) SignTransaction(tx *ethgo.Transaction) (*ethgo.Transaction, error) {
 	// 创建新的交易，手动复制所有字段
 	signedTx := &ethgo.Transaction{
@@ -112,7 +149,11 @@ func (s *MPCKMSSigner) SignTransaction(tx *ethgo.Transaction) (*ethgo.Transactio
 
 // signTransactionInternal 内部签名逻辑，处理签名应用
 func (s *MPCKMSSigner) signTransactionInternal(tx *ethgo.Transaction, signFunc func([]byte) ([]byte, error)) (*ethgo.Transaction, error) {
-	hash := s.signHash(tx)
+	hash, err := s.signHash(tx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to compute transaction hash: %w", err)
+	}
+
 	signature, err := signFunc(hash)
 	if err != nil {
 		return nil, fmt.Errorf("failed to sign transaction: %v", err)
@@ -143,7 +184,7 @@ func (s *MPCKMSSigner) signTransactionInternal(tx *ethgo.Transaction, signFunc f
 }
 
 // signHash 计算交易的签名哈希
-func (s *MPCKMSSigner) signHash(tx *ethgo.Transaction) []byte {
+func (s *MPCKMSSigner) signHash(tx *ethgo.Transaction) ([]byte, error) {
 	a := fastrlp.DefaultArenaPool.Get()
 	defer fastrlp.DefaultArenaPool.Put(a)
 
@@ -174,7 +215,7 @@ func (s *MPCKMSSigner) signHash(tx *ethgo.Transaction) []byte {
 	if tx.Type != ethgo.TransactionLegacy {
 		accessList, err := tx.AccessList.MarshalRLPWith(a)
 		if err != nil {
-			panic(err)
+			return nil, err
 		}
 		v.Set(accessList)
 	}
@@ -191,7 +232,7 @@ func (s *MPCKMSSigner) signHash(tx *ethgo.Transaction) []byte {
 		dst = append([]byte{byte(tx.Type)}, dst...)
 	}
 
-	return ethgo.Keccak256(dst)
+	return ethgo.Keccak256(dst), nil
 }
 
 // trimBytesZeros 移除字节切片的前导零
@@ -208,7 +249,18 @@ func (s *MPCKMSSigner) trimBytesZeros(b []byte) []byte {
 	return b[i:]
 }
 
-// SignTransactionWithSummary 对交易进行签名，并包含交易摘要信息
+// SignTransactionWithSummary signs an Ethereum transaction with approval summary.
+//
+// This method signs a transaction and includes a summary for KMS approval workflow.
+// The summary is displayed to approvers showing transaction details.
+//
+// Parameters:
+//   - tx: The transaction to sign
+//   - summary: Transaction summary for approval display (from, to, amount, token)
+//
+// Returns:
+//   - *ethgo.Transaction: A new transaction with signature applied
+//   - error: An error if signing fails
 func (s *MPCKMSSigner) SignTransactionWithSummary(tx *ethgo.Transaction, summary *kms.SignSummary) (*ethgo.Transaction, error) {
 	txCopy := tx.Copy()
 	txCopy.From = s.address
@@ -230,7 +282,17 @@ func (s *MPCKMSSigner) SignTransactionWithSummary(tx *ethgo.Transaction, summary
 	})
 }
 
-// CreateTransferSummary 从交易创建转账摘要
+// CreateTransferSummary creates a transfer summary from transaction details.
+//
+// This method extracts relevant transaction information for approval display.
+//
+// Parameters:
+//   - tx: The transaction to extract details from
+//   - token: The token symbol (e.g., "ETH", "USDT"). Defaults to "ETH" if empty.
+//   - remark: Optional transaction description/remark
+//
+// Returns:
+//   - *kms.SignSummary: A transaction summary for KMS approval workflow
 func (s *MPCKMSSigner) CreateTransferSummary(tx *ethgo.Transaction, token string, remark string) *kms.SignSummary {
 	from := s.address.String()
 

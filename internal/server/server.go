@@ -39,12 +39,20 @@ func (s *Server) Start() error {
 	}
 
 	s.logger.WithFields(logrus.Fields{
-		"host": s.config.HTTP.Host,
-		"port": s.config.HTTP.Port,
+		"host":              s.config.HTTP.Host,
+		"port":              s.config.HTTP.Port,
+		"tls":               s.config.HTTP.TLSCertFile != "",
+		"tls-auto-redirect": s.config.HTTP.TLSAutoRedirect,
 	}).Info("Starting HTTP server")
 
 	go func() {
-		if err := s.server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		var err error
+		if s.config.HTTP.TLSCertFile != "" {
+			err = s.server.ListenAndServeTLS(s.config.HTTP.TLSCertFile, s.config.HTTP.TLSKeyFile)
+		} else {
+			err = s.server.ListenAndServe()
+		}
+		if err != nil && err != http.ErrServerClosed {
 			s.logger.WithError(err).Fatal("HTTP server error")
 		}
 	}()

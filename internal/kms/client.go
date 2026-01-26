@@ -7,18 +7,37 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/mowind/web3signer-go/internal/config"
 	"github.com/sirupsen/logrus"
 )
 
+// Client is an MPC-KMS client for signing operations.
+//
+// It wraps an HTTP client with HMAC-SHA256 authentication and provides
+// methods for signing data with support for asynchronous approval workflows.
 type Client struct {
 	kmsConfig  *config.KMSConfig
 	httpClient HTTPClientInterface
 	logger     *logrus.Logger
+
+	// URL caching to avoid repeated string concatenation
+	signURL         string
+	signURLOnce     sync.Once
+	taskURLTemplate string
+	taskURLOnce     sync.Once
 }
 
+// NewClient creates a new MPC-KMS client with default HTTP client.
+//
+// Parameters:
+//   - kmsCfg: KMS configuration including endpoint, credentials, and key ID
+//   - logger: Logger for request/response logging
+//
+// Returns:
+//   - *Client: A new MPC-KMS client instance
 func NewClient(kmsCfg *config.KMSConfig, logger *logrus.Logger) *Client {
 	return &Client{
 		kmsConfig:  kmsCfg,
@@ -27,6 +46,17 @@ func NewClient(kmsCfg *config.KMSConfig, logger *logrus.Logger) *Client {
 	}
 }
 
+// NewClientWithHTTPClient creates a new MPC-KMS client with custom HTTP client.
+//
+// Use this method for testing or when custom HTTP client configuration is needed.
+//
+// Parameters:
+//   - kmsCfg: KMS configuration including endpoint, credentials, and key ID
+//   - logger: Logger for request/response logging
+//   - httpClient: Custom HTTP client implementing HTTPClientInterface
+//
+// Returns:
+//   - *Client: A new MPC-KMS client instance
 func NewClientWithHTTPClient(kmsCfg *config.KMSConfig, logger *logrus.Logger, httpClient HTTPClientInterface) *Client {
 	return &Client{
 		kmsConfig:  kmsCfg,
@@ -35,6 +65,17 @@ func NewClientWithHTTPClient(kmsCfg *config.KMSConfig, logger *logrus.Logger, ht
 	}
 }
 
+// NewClientWithLogger creates a new MPC-KMS client with custom HTTP client and logger.
+//
+// This method is deprecated; use NewClientWithHTTPClient instead.
+//
+// Parameters:
+//   - kmsCfg: KMS configuration including endpoint, credentials, and key ID
+//   - logger: Logger for request/response logging
+//   - httpClient: Custom HTTP client implementing HTTPClientInterface
+//
+// Returns:
+//   - *Client: A new MPC-KMS client instance
 func NewClientWithLogger(kmsCfg *config.KMSConfig, logger *logrus.Logger, httpClient HTTPClientInterface) *Client {
 	return &Client{
 		kmsConfig:  kmsCfg,
@@ -43,12 +84,69 @@ func NewClientWithLogger(kmsCfg *config.KMSConfig, logger *logrus.Logger, httpCl
 	}
 }
 
-// Sign 调用 MPC-KMS 签名端点
+// resetURLCache resets the cached URLs. Used for testing when the endpoint changes.
+func (c *Client) resetURLCache() {
+	c.signURLOnce = sync.Once{}
+	c.taskURLOnce = sync.Once{}
+	c.signURL = ""
+	c.taskURLTemplate = ""
+}
+
+// getSignURL returns the pre-computed sign endpoint URL with lazy initialization.
+// Thread-safe via sync.Once.
+func (c *Client) getSignURL(keyID string) string {
+	c.signURLOnce.Do(func() {
+		c.signURL = fmt.Sprintf("%s/api/v1/keys/", c.kmsConfig.Endpoint)
+	})
+	return fmt.Sprintf("%s%s/sign", c.signURL, keyID)
+}
+
+// getTaskURL returns the pre-computed task endpoint URL with lazy initialization.
+// Thread-safe via sync.Once.
+func (c *Client) getTaskURL(taskID string) string {
+	c.taskURLOnce.Do(func() {
+		c.taskURLTemplate = fmt.Sprintf("%s/api/v1/tasks/", c.kmsConfig.Endpoint)
+	})
+	return fmt.Sprintf("%s%s", c.taskURLTemplate, taskID)
+}
+
+// Sign signs the given message using the specified key ID.
+//
+// This is a convenience method that calls SignWithOptions with default encoding (HEX).
+//
+// Parameters:
+//   - ctx: Context for the request (supports cancellation and timeout)
+//   - keyID: The KMS key identifier to use for signing
+//   - message: The message bytes to be signed
+//
+// Returns:
+//   - []byte: The signature bytes
+//   - error: An error if the signing operation fails
 func (c *Client) Sign(ctx context.Context, keyID string, message []byte) ([]byte, error) {
 	return c.SignWithOptions(ctx, keyID, message, DataEncodingHex, nil, "")
 }
 
-// SignWithOptions 调用 MPC-KMS 签名端点，支持更多选项
+// SignWithOptions signs the given message with extended options.
+//
+// This method supports:
+//   - Data encoding format (PLAIN, BASE64, HEX)
+//   - Transaction summary for approval workflow
+//   - Callback URL for asynchronous notifications
+//
+// If the request requires approval (returns HTTP 201), it automatically polls
+// for task completion with a 5-minute timeout.
+//
+// Parameters:
+//   - ctx: Context for the request (supports cancellation and timeout)
+//   - keyID: The KMS key identifier to use for signing
+//   - message: The message bytes to be signed
+//   - encoding: Data encoding format (DataEncodingPlain, DataEncodingBase64, DataEncodingHex)
+//   - summary: Optional transaction summary for approval workflow
+//   - callbackURL: Optional URL for asynchronous approval notifications
+//
+// Returns:
+//   - []byte: The signature bytes
+//   - error: An error if the signing operation fails
 func (c *Client) SignWithOptions(ctx context.Context, keyID string, message []byte, encoding DataEncoding, summary *SignSummary, callbackURL string) ([]byte, error) {
 	startTime := time.Now()
 
@@ -84,8 +182,7 @@ func (c *Client) SignWithOptions(ctx context.Context, keyID string, message []by
 		"request_body": string(reqBody),
 	}).Debug("Sign request body")
 
-	// 构建请求URL
-	url := fmt.Sprintf("%s/api/v1/keys/%s/sign", c.kmsConfig.Endpoint, keyID)
+	url := c.getSignURL(keyID)
 
 	// 创建HTTP请求
 	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(reqBody))
@@ -210,8 +307,19 @@ func (c *Client) SignWithOptions(ctx context.Context, keyID string, message []by
 	}
 }
 
+// GetTaskResult retrieves the result of an asynchronous signing task.
+//
+// This method is used to check the status of a task that requires approval.
+//
+// Parameters:
+//   - ctx: Context for the request (supports cancellation and timeout)
+//   - taskID: The task ID to query
+//
+// Returns:
+//   - *TaskResult: The task result with status and response data
+//   - error: An error if the task retrieval fails
 func (c *Client) GetTaskResult(ctx context.Context, taskID string) (*TaskResult, error) {
-	url := fmt.Sprintf("%s/api/v1/tasks/%s", c.kmsConfig.Endpoint, taskID)
+	url := c.getTaskURL(taskID)
 
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
@@ -254,21 +362,32 @@ func (c *Client) GetTaskResult(ctx context.Context, taskID string) (*TaskResult,
 	return taskResult, nil
 }
 
-// WaitForTaskCompletion 等待任务完成
+// WaitForTaskCompletion waits for an asynchronous signing task to complete.
+//
+// This method polls the task status at the specified interval until:
+//   - Task completes (TaskStatusDone)
+//   - Task fails (TaskStatusFailed)
+//   - Task is rejected (TaskStatusRejected)
+//   - Max attempts reached (5 minutes total)
+//   - Context is cancelled or times out
+//
+// Parameters:
+//   - ctx: Context for the request (supports cancellation and timeout)
+//   - taskID: The task ID to monitor
+//   - interval: The polling interval between status checks
+//
+// Returns:
+//   - *TaskResult: The task result when complete
+//   - error: An error if task fails, is rejected, or context is cancelled
 func (c *Client) WaitForTaskCompletion(ctx context.Context, taskID string, interval time.Duration) (*TaskResult, error) {
 	startTime := time.Now()
-	ticker := time.NewTicker(interval)
-	defer ticker.Stop()
+	maxAttempts := int(5 * time.Minute / interval)
 
-	attempt := 0
-
-	for {
+	for attempt := 0; attempt < maxAttempts; attempt++ {
 		select {
 		case <-ctx.Done():
 			return nil, ctx.Err()
-		case <-ticker.C:
-			attempt++
-
+		case <-time.After(interval):
 			result, err := c.GetTaskResult(ctx, taskID)
 			if err != nil {
 				return nil, err
@@ -278,7 +397,7 @@ func (c *Client) WaitForTaskCompletion(ctx context.Context, taskID string, inter
 			c.logger.WithFields(logrus.Fields{
 				"task_id": taskID,
 				"status":  result.Status,
-				"attempt": attempt,
+				"attempt": attempt + 1,
 			}).Debug("Task status check")
 
 			switch result.Status {
@@ -294,7 +413,7 @@ func (c *Client) WaitForTaskCompletion(ctx context.Context, taskID string, inter
 					c.logger.WithFields(logrus.Fields{
 						"task_id":        taskID,
 						"status":         "done",
-						"total_attempts": attempt,
+						"total_attempts": attempt + 1,
 						"duration_ms":    duration,
 					}).Info("Task completed successfully")
 					return result, nil
@@ -302,7 +421,7 @@ func (c *Client) WaitForTaskCompletion(ctx context.Context, taskID string, inter
 				c.logger.WithFields(logrus.Fields{
 					"task_id":        taskID,
 					"status":         "done",
-					"total_attempts": attempt,
+					"total_attempts": attempt + 1,
 					"duration_ms":    duration,
 				}).Info("Task completed (no response data)")
 				return result, nil
@@ -332,4 +451,7 @@ func (c *Client) WaitForTaskCompletion(ctx context.Context, taskID string, inter
 			}
 		}
 	}
+
+	// 达到最大尝试次数
+	return nil, fmt.Errorf("task polling timeout after %d attempts", maxAttempts)
 }

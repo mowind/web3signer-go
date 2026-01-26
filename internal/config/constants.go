@@ -24,6 +24,8 @@ const (
 	DefaultHTTPHost = "localhost"
 	// DefaultHTTPPort 默认 HTTP 端口
 	DefaultHTTPPort = 9000
+	// DefaultMaxRequestSizeMB 默认最大请求大小（MB）
+	DefaultMaxRequestSizeMB int64 = 10
 
 	// DefaultDownstreamHost 默认下游服务主机（完整URL）
 	DefaultDownstreamHost = "http://localhost"

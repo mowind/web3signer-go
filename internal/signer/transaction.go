@@ -254,12 +254,58 @@ func decodeBytes(dst []byte, v *fastjson.Value, key string) ([]byte, error) {
 	return dst, nil
 }
 
+// isValidEthAddress validates an Ethereum address format
+// Returns true if the address is valid, false otherwise
+// Validation criteria:
+// - Not empty
+// - Starts with "0x" prefix
+// - Exactly 42 characters long (including "0x")
+// - All characters after "0x" are valid hexadecimal digits (0-9, a-f, A-F)
+func isValidEthAddress(addr string) bool {
+	// Check if string is empty
+	if addr == "" {
+		return false
+	}
+
+	// Check if starts with "0x" prefix
+	if !strings.HasPrefix(addr, "0x") {
+		return false
+	}
+
+	// Check if length is exactly 42
+	if len(addr) != 42 {
+		return false
+	}
+
+	// Check if all characters after "0x" are valid hex digits
+	for _, c := range addr[2:] {
+		if !isHexDigit(c) {
+			return false
+		}
+	}
+
+	return true
+}
+
+// isHexDigit checks if a character is a valid hexadecimal digit (0-9, a-f, A-F)
+func isHexDigit(c rune) bool {
+	return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')
+}
+
 // decodeAddr decodes an Address field
 func decodeAddr(a *ethgo.Address, v *fastjson.Value, key string) error {
 	b := v.GetStringBytes(key)
 	if len(b) == 0 {
 		return fmt.Errorf("field '%s' not found", key)
 	}
+
+	addrStr := string(b)
+
+	// Validate address format before unmarshalling
+	if !isValidEthAddress(addrStr) {
+		return fmt.Errorf("field '%s' has invalid address format: '%s'", key, addrStr)
+	}
+
 	if err := a.UnmarshalText(b); err != nil {
 		return fmt.Errorf("field '%s' failed to decode address: %w", key, err)
 	}

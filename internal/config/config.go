@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"net/url"
+	"os"
 	"strings"
 )
 
@@ -19,12 +20,19 @@ type Config struct {
 
 	// 日志配置
 	Log LogConfig `mapstructure:"log"`
+
+	// 认证配置
+	Auth AuthConfig `mapstructure:"auth"`
 }
 
 // HTTPConfig 定义 HTTP 服务器配置
 type HTTPConfig struct {
-	Host string `mapstructure:"host"`
-	Port int    `mapstructure:"port"`
+	Host             string `mapstructure:"host"`
+	Port             int    `mapstructure:"port"`
+	TLSCertFile      string `mapstructure:"tls-cert-file"`
+	TLSKeyFile       string `mapstructure:"tls-key-file"`
+	TLSAutoRedirect  bool   `mapstructure:"tls-auto-redirect"`
+	MaxRequestSizeMB int64  `mapstructure:"max-request-size-mb"` // 最大请求体大小（MB），用于防止DoS攻击
 }
 
 // Validate 验证 HTTP 配置
@@ -34,6 +42,25 @@ func (c *HTTPConfig) Validate() error {
 	}
 	if c.Port <= 0 || c.Port > MaxPort {
 		return fmt.Errorf("http-port must be between 1 and %d", MaxPort)
+	}
+	if c.TLSCertFile != "" && c.TLSKeyFile == "" {
+		return fmt.Errorf("tls-key-file is required when tls-cert-file is set")
+	}
+	if c.TLSKeyFile != "" && c.TLSCertFile == "" {
+		return fmt.Errorf("tls-cert-file is required when tls-key-file is set")
+	}
+	if c.TLSCertFile != "" {
+		if _, err := os.Stat(c.TLSCertFile); os.IsNotExist(err) {
+			return fmt.Errorf("tls-cert-file does not exist: %s", c.TLSCertFile)
+		}
+	}
+	if c.TLSKeyFile != "" {
+		if _, err := os.Stat(c.TLSKeyFile); os.IsNotExist(err) {
+			return fmt.Errorf("tls-key-file does not exist: %s", c.TLSKeyFile)
+		}
+	}
+	if c.MaxRequestSizeMB <= 0 {
+		c.MaxRequestSizeMB = 10
 	}
 	return nil
 }
@@ -64,7 +91,39 @@ func (c *KMSConfig) Validate() error {
 	if c.Address == "" {
 		return fmt.Errorf("kms-address is required")
 	}
+	// 验证地址格式
+	if !isValidEthAddress(c.Address) {
+		return fmt.Errorf("kms-address has invalid Ethereum address format: '%s'", c.Address)
+	}
 	return nil
+}
+
+// isValidEthAddress 验证以太坊地址格式
+func isValidEthAddress(addr string) bool {
+	// 检查是否为空
+	if addr == "" {
+		return false
+	}
+	// 检查是否有 "0x" 前缀
+	if !strings.HasPrefix(addr, "0x") {
+		return false
+	}
+	// 检查长度是否为 42
+	if len(addr) != 42 {
+		return false
+	}
+	// 检查 "0x" 之后的所有字符是否都是有效的十六进制数字
+	for _, c := range addr[2:] {
+		if !isHexDigit(c) {
+			return false
+		}
+	}
+	return true
+}
+
+// isHexDigit 检查字符是否为有效的十六进制数字 (0-9, a-f, A-F)
+func isHexDigit(c rune) bool {
+	return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')
 }
 
 // DownstreamConfig 定义下游服务配置
@@ -159,16 +218,35 @@ func (c *Config) Validate() error {
 	return nil
 }
 
+// AuthConfig 定义认证配置
+type AuthConfig struct {
+	Enabled   bool     `mapstructure:"enabled"`   // 是否启用认证
+	Secret    string   `mapstructure:"secret"`    // 认证密钥（用于 JWT 或 API Key）
+	Whitelist []string `mapstructure:"whitelist"` // 白名单路径（不需要认证的路径）
+}
+
+// Validate 验证认证配置
+func (c *AuthConfig) Validate() error {
+	if c.Enabled {
+		if c.Secret == "" {
+			return fmt.Errorf("auth-secret is required when auth is enabled")
+		}
+	}
+	return nil
+}
+
 // String 返回配置的安全摘要（不包含敏感信息）
 func (c *Config) String() string {
 	return fmt.Sprintf(
 		"HTTP: {Host: %s, Port: %d}, "+
 			"KMS: {Endpoint: %s, KeyID: %s, AccessKeyID: [REDACTED], SecretKey: [REDACTED]}, "+
 			"Downstream: {Host: %s, Port: %d, Path: %s}, "+
-			"Log: {Level: %s, Format: %s}",
+			"Log: {Level: %s, Format: %s}, "+
+			"Auth: {Enabled: %v, Secret: [REDACTED], Whitelist: %v}",
 		c.HTTP.Host, c.HTTP.Port,
 		c.KMS.Endpoint, c.KMS.KeyID,
 		c.Downstream.HTTPHost, c.Downstream.HTTPPort, c.Downstream.HTTPPath,
 		c.Log.Level, c.Log.Format,
+		c.Auth.Enabled, c.Auth.Whitelist,
 	)
 }

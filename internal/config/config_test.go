@@ -1,6 +1,8 @@
 package config
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -16,6 +18,27 @@ func TestHTTPConfig_Validate(t *testing.T) {
 			config: HTTPConfig{
 				Host: "localhost",
 				Port: 8080,
+			},
+			wantErr: false,
+		},
+		{
+			name: "valid TLS config",
+			config: HTTPConfig{
+				Host:        "localhost",
+				Port:        8443,
+				TLSCertFile: createTempFile(t, "cert.pem", []byte("cert content")),
+				TLSKeyFile:  createTempFile(t, "key.pem", []byte("key content")),
+			},
+			wantErr: false,
+		},
+		{
+			name: "valid TLS with auto-redirect",
+			config: HTTPConfig{
+				Host:            "localhost",
+				Port:            8443,
+				TLSCertFile:     createTempFile(t, "cert.pem", []byte("cert content")),
+				TLSKeyFile:      createTempFile(t, "key.pem", []byte("key content")),
+				TLSAutoRedirect: true,
 			},
 			wantErr: false,
 		},
@@ -42,6 +65,35 @@ func TestHTTPConfig_Validate(t *testing.T) {
 				Port: MaxPort + 1,
 			},
 			wantErr: true,
+		},
+		{
+			name: "TLS cert without key",
+			config: HTTPConfig{
+				Host:        "localhost",
+				Port:        8443,
+				TLSCertFile: "/path/to/cert.pem",
+				TLSKeyFile:  "",
+			},
+			wantErr: true,
+		},
+		{
+			name: "TLS key without cert",
+			config: HTTPConfig{
+				Host:        "localhost",
+				Port:        8443,
+				TLSCertFile: "",
+				TLSKeyFile:  "/path/to/key.pem",
+			},
+			wantErr: true,
+		},
+		{
+			name: "TLS auto-redirect without cert/key",
+			config: HTTPConfig{
+				Host:            "localhost",
+				Port:            8443,
+				TLSAutoRedirect: true,
+			},
+			wantErr: false,
 		},
 	}
 
@@ -542,4 +594,80 @@ func TestKMSConfig_Validate_MoreCases(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestHTTPConfig_Validate_TLSFileExistence(t *testing.T) {
+	tests := []struct {
+		name        string
+		config      HTTPConfig
+		wantErr     bool
+		errContains string
+	}{
+		{
+			name: "valid TLS with existing files",
+			config: HTTPConfig{
+				Host:        "localhost",
+				Port:        8443,
+				TLSCertFile: createTempFile(t, "cert.pem", []byte("cert content")),
+				TLSKeyFile:  createTempFile(t, "key.pem", []byte("key content")),
+			},
+			wantErr: false,
+		},
+		{
+			name: "non-existent TLS cert file",
+			config: HTTPConfig{
+				Host:        "localhost",
+				Port:        8443,
+				TLSCertFile: "/nonexistent/cert.pem",
+				TLSKeyFile:  "/nonexistent/key.pem",
+			},
+			wantErr:     true,
+			errContains: "tls-cert-file does not exist",
+		},
+		{
+			name: "non-existent TLS key file",
+			config: HTTPConfig{
+				Host:        "localhost",
+				Port:        8443,
+				TLSCertFile: createTempFile(t, "cert.pem", []byte("cert content")),
+				TLSKeyFile:  "/nonexistent/key.pem",
+			},
+			wantErr:     true,
+			errContains: "tls-key-file does not exist",
+		},
+		{
+			name: "both TLS files exist",
+			config: HTTPConfig{
+				Host:        "localhost",
+				Port:        8443,
+				TLSCertFile: createTempFile(t, "cert.pem", []byte("cert content")),
+				TLSKeyFile:  createTempFile(t, "key.pem", []byte("key content")),
+			},
+			wantErr: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := tt.config.Validate()
+			if (err != nil) != tt.wantErr {
+				t.Errorf("HTTPConfig.Validate() error = %v, wantErr %v", err, tt.wantErr)
+			}
+			if tt.wantErr && tt.errContains != "" {
+				if err == nil || !strings.Contains(err.Error(), tt.errContains) {
+					t.Errorf("error should contain %q, got %v", tt.errContains, err)
+				}
+			}
+		})
+	}
+}
+
+func createTempFile(t *testing.T, name string, content []byte) string {
+	t.Helper()
+	dir := t.TempDir()
+	path := filepath.Join(dir, name)
+	if err := os.WriteFile(path, content, 0600); err != nil {
+		t.Fatalf("failed to create temp file: %v", err)
+	}
+	return path
 }

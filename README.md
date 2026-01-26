@@ -36,10 +36,13 @@ It provides a transparent HTTP JSON-RPC proxy that:
 - ✅ **Health Checks** - `/health` and `/ready` endpoints for monitoring
 - ✅ **CORS Support** - Configurable CORS headers for web applications
 - ✅ **Configuration Management** - CLI flags, config files, and environment variables
-- ✅ **Structured Logging** - Logrus-based logging with configurable levels
-- ✅ **Comprehensive Testing** - Unit tests and integration tests with high coverage
-- ✅ **Docker Support** - Multi-stage Dockerfile for production deployments
-- ✅ **CI/CD Pipeline** - Automated testing, linting, and security scanning
+ - ✅ **Structured Logging** - Logrus-based logging with configurable levels
+ - ✅ **Comprehensive Testing** - Unit tests and integration tests with high coverage
+ - ✅ **Docker Support** - Multi-stage Dockerfile for production deployments
+ - ✅ **CI/CD Pipeline** - Automated testing, linting, and security scanning
+ - ✅ **TLS Support** - HTTPS/TLS for secure communication
+ - ✅ **Authentication** - JWT Bearer token and API-Key authentication
+ - ✅ **Security Hardening** - Constant-time comparisons, input validation, rate limiting
 
 ## Quick Start
 
@@ -113,6 +116,14 @@ Create a configuration file `~/.web3signer.yaml`:
 http:
   host: localhost
   port: 9000
+  max-request-size-mb: 10
+  tls-enabled: false
+  # tls-cert-file: /path/to/cert.pem
+  # tls-key-file: /path/to/key.pem
+
+auth:
+  enabled: true
+  secret: your_shared_secret_here
 
 kms:
   endpoint: http://kms.example.com:8080
@@ -127,6 +138,7 @@ downstream:
 
 log:
   level: info
+  format: json
 ```
 
 Then run with:
@@ -271,6 +283,15 @@ make build
 ### HTTP Server Configuration
 - `--http-host` - Server host (default: `localhost`)
 - `--http-port` - Server port (default: `9000`)
+- `--http-max-request-size` - Maximum request body size in MB (default: `10`)
+- `--tls-enabled` - Enable TLS/HTTPS (default: `false`)
+- `--tls-cert-file` - Path to TLS certificate file (required if TLS enabled)
+- `--tls-key-file` - Path to TLS private key file (required if TLS enabled)
+- `--tls-auto-redirect` - Auto redirect HTTP to HTTPS (default: `false`)
+
+### Authentication Configuration
+- `--auth-enabled` - Enable authentication middleware (default: `false`)
+- `--auth-secret` - Shared secret for Bearer tokens and API-Keys (required if auth enabled)
 
 ### MPC-KMS Configuration
 - `--kms-endpoint` - MPC-KMS endpoint URL (required)
@@ -294,6 +315,10 @@ All configuration options can be set via environment variables using the `WEB3SI
 ```bash
 export WEB3SIGNER_HTTP_HOST=0.0.0.0
 export WEB3SIGNER_HTTP_PORT=9000
+export WEB3SIGNER_HTTP_MAX_REQUEST_SIZE_MB=10
+export WEB3SIGNER_TLS_ENABLED=false
+export WEB3SIGNER_AUTH_ENABLED=true
+export WEB3SIGNER_AUTH_SECRET=your_shared_secret
 export WEB3SIGNER_KMS_ENDPOINT=http://kms.example.com:8080
 export WEB3SIGNER_KMS_ACCESS_KEY_ID=your_access_key
 export WEB3SIGNER_KMS_SECRET_KEY=your_secret_key
@@ -309,6 +334,8 @@ export WEB3SIGNER_KMS_KEY_ID=your_key_id
 | `/health` | GET | Service health check |
 | `/ready` | GET | Service readiness check |
 
+**Note:** These endpoints bypass authentication (if enabled) for monitoring purposes.
+
 **Response Example:**
 
 ```json
@@ -323,6 +350,32 @@ export WEB3SIGNER_KMS_KEY_ID=your_key_id
 | Endpoint | Method | Description |
 |----------|--------|-------------|
 | `/` | POST | JSON-RPC 2.0 endpoint |
+
+### Authentication
+
+When authentication is enabled (`--auth-enabled=true`), requests must include one of the following:
+
+**Option 1: Bearer Token**
+```bash
+curl -X POST https://localhost:9000/ \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer your_shared_secret" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"eth_accounts"}'
+```
+
+**Option 2: API-Key Header**
+```bash
+curl -X POST https://localhost:9000/ \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: your_shared_secret" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"eth_accounts"}'
+```
+
+**Security Notes:**
+- Both methods use the same shared secret configured via `--auth-secret`
+- Constant-time comparison prevents timing attacks
+- Generic error messages prevent information leakage
+- Whitelisted paths (`/health`, `/ready`) bypass authentication
 
 ### Supported Signing Methods
 

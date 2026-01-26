@@ -11,23 +11,68 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
+// HTTPClient is an HTTP client with MPC-KMS HMAC-SHA256 authentication.
+//
+// It automatically signs all requests according to MPC-KMS authentication specification,
+// including timestamp generation, content hashing, and HMAC-SHA256 signature calculation.
 type HTTPClient struct {
 	kmsConfig  *config.KMSConfig
 	httpClient *http.Client
 	logger     *logrus.Logger
 }
 
+// NewHTTPClient creates a new MPC-KMS HTTP client.
+//
+// The client is configured with a 30-second timeout and optimized connection pooling:
+//   - MaxIdleConns: 100 (maximum idle connections across all hosts)
+//   - MaxIdleConnsPerHost: 100 (maximum idle connections per host)
+//   - IdleConnTimeout: 90s (timeout for idle connections)
+//   - ResponseHeaderTimeout: 10s (timeout for receiving response headers)
+//
+// Parameters:
+//   - kmsCfg: KMS configuration including endpoint and credentials
+//   - logger: Logger for request/response logging
+//
+// Returns:
+//   - *HTTPClient: A new HTTP client instance
 func NewHTTPClient(kmsCfg *config.KMSConfig, logger *logrus.Logger) *HTTPClient {
 	return &HTTPClient{
 		kmsConfig: kmsCfg,
 		httpClient: &http.Client{
-			Timeout: 30 * time.Second,
+			Timeout:   30 * time.Second,
+			Transport: createTransport(),
 		},
 		logger: logger,
 	}
 }
 
-// SignRequest 对 HTTP 请求进行签名（根据 MPC-KMS 文档规范）
+// createTransport 创建HTTP传输配置，用于优化连接池性能
+func createTransport() *http.Transport {
+	return &http.Transport{
+		MaxIdleConns:          100,
+		MaxIdleConnsPerHost:   100,
+		IdleConnTimeout:       90 * time.Second,
+		ResponseHeaderTimeout: 10 * time.Second,
+		DisableCompression:    false,
+		DisableKeepAlives:     false,
+	}
+}
+
+// SignRequest signs an HTTP request according to MPC-KMS specification.
+//
+// This method performs HMAC-SHA256 authentication:
+//  1. Generate GMT timestamp
+//  2. Calculate Content-SHA256 (base64 encoded)
+//  3. Build signing string: VERB\nContent-SHA256\nContent-Type\nDate
+//  4. Calculate HMAC-SHA256 signature
+//  5. Set Authorization header: "MPC-KMS AK:Signature"
+//
+// Parameters:
+//   - req: The HTTP request to sign (will be modified in place)
+//   - body: The request body bytes for Content-SHA256 calculation
+//
+// Returns:
+//   - error: An error if signing fails
 func (c *HTTPClient) SignRequest(req *http.Request, body []byte) error {
 	// 1. 生成 GMT 格式的时间戳
 	date := time.Now().UTC().Format("Mon, 02 Jan 2006 15:04:05 GMT")
@@ -58,7 +103,20 @@ func (c *HTTPClient) SignRequest(req *http.Request, body []byte) error {
 	return nil
 }
 
-// Do 执行已签名的 HTTP 请求
+// Do executes an HTTP request with automatic signing.
+//
+// This method:
+//  1. Reads the request body (if present)
+//  2. Signs the request using SignRequest
+//  3. Executes the request
+//  4. Logs the result at debug level
+//
+// Parameters:
+//   - req: The HTTP request to execute (will be signed and sent)
+//
+// Returns:
+//   - *http.Response: The HTTP response
+//   - error: An error if request execution fails
 func (c *HTTPClient) Do(req *http.Request) (*http.Response, error) {
 	// 记录请求开始（debug 级别）
 	c.logger.WithFields(logrus.Fields{
@@ -113,14 +171,39 @@ func (c *HTTPClient) Do(req *http.Request) (*http.Response, error) {
 	return resp, nil
 }
 
-// HTTPClientInterface 定义 HTTP 客户端接口
+// HTTPClientInterface defines the HTTP client interface for MPC-KMS requests.
+//
+// This interface allows for mocking and testing of HTTP operations.
 type HTTPClientInterface interface {
-	// SignRequest 对 HTTP 请求进行签名
+	// SignRequest signs an HTTP request according to MPC-KMS specification.
+	//
+	// Parameters:
+	//   - req: The HTTP request to sign
+	//   - body: The request body bytes
+	//
+	// Returns:
+	//   - error: An error if signing fails
 	SignRequest(req *http.Request, body []byte) error
 
-	// Do 执行已签名的 HTTP 请求
+	// Do executes an HTTP request with automatic signing.
+	//
+	// Parameters:
+	//   - req: The HTTP request to execute
+	//
+	// Returns:
+	//   - *http.Response: The HTTP response
+	//   - error: An error if execution fails
 	Do(req *http.Request) (*http.Response, error)
 }
 
 // VerifyInterfaceImplementation 验证接口实现
 var _ HTTPClientInterface = (*HTTPClient)(nil)
+
+// GetTransport returns the HTTP transport used by the client.
+// This is primarily for testing purposes to verify connection pool configuration.
+func (c *HTTPClient) GetTransport() *http.Transport {
+	if c.httpClient == nil || c.httpClient.Transport == nil {
+		return nil
+	}
+	return c.httpClient.Transport.(*http.Transport)
+}

@@ -352,3 +352,89 @@ func TestMPCKMSSigner_Sign_KMSError(t *testing.T) {
 		t.Errorf("Unexpected error message: %v", err)
 	}
 }
+
+func TestMPCKMSSigner_SignTransaction_AccessListTransaction(t *testing.T) {
+	toAddr := ethgo.HexToAddress("0x0987654321098765432109876543210987654321")
+	tx := &ethgo.Transaction{
+		Type:  ethgo.TransactionAccessList,
+		To:    &toAddr,
+		Nonce: 5,
+		Gas:   21000,
+		Value: big.NewInt(1000000000000000000),
+		Input: []byte{},
+		AccessList: ethgo.AccessList{
+			{
+				Address: ethgo.Address{},
+				Storage: []ethgo.Hash{},
+			},
+		},
+		ChainID: big.NewInt(1),
+	}
+
+	client := &mockKMSClient{
+		signFunc: func(ctx context.Context, keyID string, message []byte) ([]byte, error) {
+			signature := make([]byte, 65)
+			for i := 0; i < 65; i++ {
+				signature[i] = byte(i + 1)
+			}
+			return []byte(hex.EncodeToString(signature)), nil
+		},
+	}
+
+	address := ethgo.HexToAddress("0x1234567890123456789012345678901234567890")
+	signer := NewMPCKMSSigner(client, "test-key-id", address, big.NewInt(1))
+
+	signedTx, err := signer.SignTransaction(tx)
+	if err != nil {
+		t.Fatalf("Failed to sign transaction with AccessList: %v", err)
+	}
+
+	if len(signedTx.R) != 32 {
+		t.Errorf("Expected R length 32, got %d", len(signedTx.R))
+	}
+
+	if len(signedTx.S) != 32 {
+		t.Errorf("Expected S length 32, got %d", len(signedTx.S))
+	}
+}
+
+func TestMPCKMSSigner_SignTransaction_DynamicFeeTransaction(t *testing.T) {
+	toAddr := ethgo.HexToAddress("0x0987654321098765432109876543210987654321")
+	tx := &ethgo.Transaction{
+		Type:                 ethgo.TransactionDynamicFee,
+		To:                   &toAddr,
+		Nonce:                5,
+		Gas:                  21000,
+		MaxFeePerGas:         big.NewInt(30000000000),
+		MaxPriorityFeePerGas: big.NewInt(2000000000),
+		Value:                big.NewInt(1000000000000000000),
+		Input:                []byte{},
+		ChainID:              big.NewInt(1),
+	}
+
+	client := &mockKMSClient{
+		signFunc: func(ctx context.Context, keyID string, message []byte) ([]byte, error) {
+			signature := make([]byte, 65)
+			for i := 0; i < 65; i++ {
+				signature[i] = byte(i + 1)
+			}
+			return []byte(hex.EncodeToString(signature)), nil
+		},
+	}
+
+	address := ethgo.HexToAddress("0x1234567890123456789012345678901234567890")
+	signer := NewMPCKMSSigner(client, "test-key-id", address, big.NewInt(1))
+
+	signedTx, err := signer.SignTransaction(tx)
+	if err != nil {
+		t.Fatalf("Failed to sign dynamic fee transaction: %v", err)
+	}
+
+	if len(signedTx.R) != 32 {
+		t.Errorf("Expected R length 32, got %d", len(signedTx.R))
+	}
+
+	if len(signedTx.S) != 32 {
+		t.Errorf("Expected S length 32, got %d", len(signedTx.S))
+	}
+}

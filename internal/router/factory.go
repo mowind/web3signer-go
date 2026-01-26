@@ -11,19 +11,26 @@ import (
 
 // RouterFactory 路由器工厂，简化路由器的创建和配置
 type RouterFactory struct {
-	logger *logrus.Entry
+	logger         *logrus.Entry
+	maxRequestSize int64
 }
 
 // NewRouterFactory 创建路由器工厂
 func NewRouterFactory(logger *logrus.Logger) *RouterFactory {
+	return NewRouterFactoryWithMaxSize(logger, 10*1024*1024)
+}
+
+// NewRouterFactoryWithMaxSize 创建路由器工厂并指定最大请求体大小
+func NewRouterFactoryWithMaxSize(logger *logrus.Logger, maxRequestSize int64) *RouterFactory {
 	return &RouterFactory{
-		logger: logger.WithField("component", "router_factory"),
+		logger:         logger.WithField("component", "router_factory"),
+		maxRequestSize: maxRequestSize,
 	}
 }
 
 // CreateRouter 创建完整配置的路由器
-func (f *RouterFactory) CreateRouter(mpcSigner *signer.MPCKMSSigner, downstreamClient downstream.ClientInterface) *Router {
-	router := NewRouter(f.logger.Logger)
+func (f *RouterFactory) CreateRouter(mpcSigner signer.Client, downstreamClient downstream.ClientInterface) *Router { //nolint:staticcheck // SA1019: backward compatibility
+	router := NewRouterWithMaxSize(f.logger.Logger, f.maxRequestSize)
 
 	// 注册签名处理器
 	signHandler, err := NewSignHandler(mpcSigner, downstreamClient, downstreamClient.GetEndpoint(), f.logger.Logger)
@@ -89,5 +96,5 @@ func (m *MethodHandler) Handle(ctx context.Context, request *jsonrpc.Request) (*
 
 // CreateSimpleRouter 创建简化的路由器（用于测试）
 func (f *RouterFactory) CreateSimpleRouter() *Router {
-	return NewRouter(f.logger.Logger)
+	return NewRouterWithMaxSize(f.logger.Logger, f.maxRequestSize)
 }

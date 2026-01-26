@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"fmt"
 	"math/big"
+	"net/http"
 	"strings"
 	"time"
 
@@ -19,18 +20,62 @@ import (
 	ethgojsonrpc "github.com/umbracle/ethgo/jsonrpc"
 )
 
-// Builder 服务器构建器
+// Builder builds a configured web3signer server.
+//
+// This struct provides a fluent interface for server configuration
+// with TLS support and logging setup.
 type Builder struct {
 	cfg    *config.Config
 	logger *logrus.Logger
 }
 
-// NewBuilder 创建新的服务器构建器
+// NewBuilder creates a new server builder.
+//
+// Parameters:
+//   - cfg: Server configuration
+//
+// Returns:
+//   - *Builder: A new builder instance
 func NewBuilder(cfg *config.Config) *Builder {
 	return &Builder{cfg: cfg}
 }
 
-// Build 构建服务器
+// WithTLS configures TLS for the server.
+//
+// Parameters:
+//   - certFile: Path to TLS certificate file
+//   - keyFile: Path to TLS private key file
+//
+// Returns:
+//   - *Builder: The builder with TLS configured
+func (b *Builder) WithTLS(certFile, keyFile string) *Builder {
+	b.cfg.HTTP.TLSCertFile = certFile
+	b.cfg.HTTP.TLSKeyFile = keyFile
+	return b
+}
+
+// WithTLSAutoRedirect configures automatic HTTP to HTTPS redirect.
+//
+// Parameters:
+//   - enable: Whether to enable auto-redirect
+//
+// Returns:
+//   - *Builder: The builder with auto-redirect configured
+func (b *Builder) WithTLSAutoRedirect(enable bool) *Builder {
+	b.cfg.HTTP.TLSAutoRedirect = enable
+	return b
+}
+
+// Build creates and configures a ready-to-start server.
+//
+// This method:
+//   - Sets up logging
+//   - Creates HTTP and JSON-RPC clients
+//   - Creates and configures Gin router
+//   - Initializes signer and router
+//
+// Returns:
+//   - *Server: A fully configured server instance
 func (b *Builder) Build() *Server {
 	b.setGinMode()
 
@@ -56,8 +101,16 @@ func (b *Builder) Build() *Server {
 	kmsAddress := ethgo.HexToAddress(b.cfg.KMS.Address)
 	mpcSigner := signer.NewMPCKMSSigner(kmsClient, b.cfg.KMS.KeyID, kmsAddress, chainID)
 
-	routerFactory := router.NewRouterFactory(logger)
-	jsonRPCRouter := routerFactory.CreateRouter(mpcSigner, downstreamClient)
+	// Create MultiKeySigner for multi-key support
+	// Currently uses default key from config for backward compatibility
+	multiKeySigner := signer.NewMultiKeySigner(b.cfg.KMS.KeyID, chainID, logger)
+	if err := multiKeySigner.AddClient(b.cfg.KMS.KeyID, mpcSigner); err != nil {
+		logger.WithError(err).Fatal("Failed to add default client to MultiKeySigner")
+	}
+
+	maxRequestSize := b.cfg.HTTP.MaxRequestSizeMB * 1024 * 1024
+	routerFactory := router.NewRouterFactoryWithMaxSize(logger, maxRequestSize)
+	jsonRPCRouter := routerFactory.CreateRouter(multiKeySigner, downstreamClient)
 
 	router := b.createGinRouter(jsonRPCRouter, logger)
 
@@ -92,6 +145,12 @@ func (b *Builder) createGinRouter(jsonRPCRouter *router.Router, logger *logrus.L
 	router.Use(ginlogrus.Logger(logger))
 	router.Use(gin.Recovery())
 	router.Use(b.corsMiddleware())
+	router.Use(AuthMiddleware(b.cfg.Auth.Enabled, b.cfg.Auth.Secret, b.cfg.Auth.Whitelist))
+
+	// 如果启用 TLS 自动重定向，添加重定向中间件
+	if b.cfg.HTTP.TLSAutoRedirect && b.cfg.HTTP.TLSCertFile != "" {
+		router.Use(b.tlsRedirectMiddleware())
+	}
 
 	// JSON-RPC端点，路由到jsonRPCRouter
 	router.POST("/", b.handleJSONRPCRequest(jsonRPCRouter))
@@ -229,6 +288,20 @@ func (b *Builder) corsMiddleware() gin.HandlerFunc {
 			return
 		}
 
+		c.Next()
+	}
+}
+
+// tlsRedirectMiddleware HTTP到HTTPS重定向中间件
+func (b *Builder) tlsRedirectMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if c.Request.TLS == nil {
+			host := c.Request.Host
+			target := "https://" + host + c.Request.URL.RequestURI()
+			c.Redirect(http.StatusMovedPermanently, target)
+			c.Abort()
+			return
+		}
 		c.Next()
 	}
 }

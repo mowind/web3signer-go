@@ -375,3 +375,145 @@ func (p *fastjsonParserPool) Get() *fastjson.Parser {
 func (p *fastjsonParserPool) Put(parser *fastjson.Parser) {
 	// Parser is not pooled in tests
 }
+
+func TestIsValidEthAddress(t *testing.T) {
+	tests := []struct {
+		name string
+		addr string
+		want bool
+	}{
+		{
+			name: "Valid address with mixed case",
+			addr: "0x1234567890123456789012345678901234567890",
+			want: true,
+		},
+		{
+			name: "Valid address all lowercase",
+			addr: "0x1234567890123456789012345678901234567890",
+			want: true,
+		},
+		{
+			name: "Valid address all uppercase",
+			addr: "0x1234567890123456789012345678901234567890",
+			want: true,
+		},
+		{
+			name: "Empty string",
+			addr: "",
+			want: false,
+		},
+		{
+			name: "Missing 0x prefix",
+			addr: "1234567890123456789012345678901234567890",
+			want: false,
+		},
+		{
+			name: "Wrong length - too short",
+			addr: "0x123456789012345678901234567890123456789",
+			want: false,
+		},
+		{
+			name: "Wrong length - too long",
+			addr: "0x12345678901234567890123456789012345678900",
+			want: false,
+		},
+		{
+			name: "Invalid hex character - lowercase g",
+			addr: "0x123456789012345678901234567890123456789g",
+			want: false,
+		},
+		{
+			name: "Invalid hex character - uppercase G",
+			addr: "0x123456789012345678901234567890123456789G",
+			want: false,
+		},
+		{
+			name: "Invalid hex character - special char",
+			addr: "0x123456789012345678901234567890123456789!",
+			want: false,
+		},
+		{
+			name: "Invalid hex character - space",
+			addr: "0x12345678901234567890123456789012345678 ",
+			want: false,
+		},
+		{
+			name: "Wrong prefix - 0X (uppercase)",
+			addr: "0X1234567890123456789012345678901234567890",
+			want: false,
+		},
+		{
+			name: "Only 0x prefix",
+			addr: "0x",
+			want: false,
+		},
+		{
+			name: "Valid zeros address",
+			addr: "0x0000000000000000000000000000000000000000",
+			want: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := isValidEthAddress(tt.addr)
+			if got != tt.want {
+				t.Errorf("isValidEthAddress() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestDecodeAddrValidation(t *testing.T) {
+	tests := []struct {
+		name    string
+		input   string
+		key     string
+		wantErr bool
+	}{
+		{
+			name:    "Valid address",
+			input:   `{"addr": "0x1234567890123456789012345678901234567890"}`,
+			key:     "addr",
+			wantErr: false,
+		},
+		{
+			name:    "Empty address",
+			input:   `{"addr": ""}`,
+			key:     "addr",
+			wantErr: true,
+		},
+		{
+			name:    "Missing 0x prefix",
+			input:   `{"addr": "1234567890123456789012345678901234567890"}`,
+			key:     "addr",
+			wantErr: true,
+		},
+		{
+			name:    "Wrong length - too short",
+			input:   `{"addr": "0x123456789012345678901234567890123456789"}`,
+			key:     "addr",
+			wantErr: true,
+		},
+		{
+			name:    "Invalid hex character",
+			input:   `{"addr": "0x123456789012345678901234567890123456789g"}`,
+			key:     "addr",
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var pool fastjsonParserPool
+			p, _ := pool.Get().Parse(tt.input)
+
+			var addr ethgo.Address
+			err := decodeAddr(&addr, p, tt.key)
+
+			if (err != nil) != tt.wantErr {
+				t.Errorf("decodeAddr() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
+	}
+}

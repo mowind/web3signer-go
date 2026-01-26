@@ -707,6 +707,7 @@ func TestClient_SignWithOptions_MoreCases(t *testing.T) {
 		defer server.Close()
 
 		client.kmsConfig.Endpoint = server.URL
+		client.resetURLCache()
 
 		signature, err := client.SignWithOptions(
 			context.Background(),
@@ -752,6 +753,7 @@ func TestClient_SignWithOptions_MoreCases(t *testing.T) {
 		defer server.Close()
 
 		client.kmsConfig.Endpoint = server.URL
+		client.resetURLCache()
 
 		summary := NewTransferSummary("0x123", "0x456", "1.0", "ETH", "test transfer")
 		signature, err := client.SignWithOptions(
@@ -944,5 +946,158 @@ func TestClient_Do_ErrorCases(t *testing.T) {
 	t.Run("invalid JSON response", func(t *testing.T) {
 		// 跳过这个测试，因为Do方法可能不验证响应JSON
 		t.Skip("Skipping invalid JSON response test")
+	})
+}
+
+func TestURLCaching_AfterInit(t *testing.T) {
+	cfg := &config.KMSConfig{
+		Endpoint:    "https://kms.example.com",
+		AccessKeyID: "AK1234567890",
+		SecretKey:   "test-secret-key",
+		KeyID:       "test-key-id",
+	}
+
+	client := NewClient(cfg, defaultLogger())
+
+	// First call should initialize the URL
+	keyID := "key-12345"
+	url1 := client.getSignURL(keyID)
+
+	expectedURL := "https://kms.example.com/api/v1/keys/key-12345/sign"
+	if url1 != expectedURL {
+		t.Errorf("First call: expected %s, got %s", expectedURL, url1)
+	}
+
+	// Second call should use cached URL
+	url2 := client.getSignURL(keyID)
+	if url2 != expectedURL {
+		t.Errorf("Second call: expected %s, got %s", expectedURL, url2)
+	}
+
+	// Test task URL caching
+	taskID := "task-67890"
+	taskURL1 := client.getTaskURL(taskID)
+
+	expectedTaskURL := "https://kms.example.com/api/v1/tasks/task-67890"
+	if taskURL1 != expectedTaskURL {
+		t.Errorf("First task call: expected %s, got %s", expectedTaskURL, taskURL1)
+	}
+
+	// Second call should use cached URL
+	taskURL2 := client.getTaskURL(taskID)
+	if taskURL2 != expectedTaskURL {
+		t.Errorf("Second task call: expected %s, got %s", expectedTaskURL, taskURL2)
+	}
+}
+
+func TestURLCaching_ThreadSafe(t *testing.T) {
+	cfg := &config.KMSConfig{
+		Endpoint:    "https://kms.example.com",
+		AccessKeyID: "AK1234567890",
+		SecretKey:   "test-secret-key",
+		KeyID:       "test-key-id",
+	}
+
+	client := NewClient(cfg, defaultLogger())
+
+	// Launch multiple goroutines to test thread safety
+	const numGoroutines = 100
+	const numCallsPerGoroutine = 10
+
+	done := make(chan bool, numGoroutines)
+
+	for i := 0; i < numGoroutines; i++ {
+		go func(goroutineID int) {
+			for j := 0; j < numCallsPerGoroutine; j++ {
+				keyID := fmt.Sprintf("key-%d", goroutineID%10)
+				url := client.getSignURL(keyID)
+
+				expectedURL := fmt.Sprintf("https://kms.example.com/api/v1/keys/%s/sign", keyID)
+				if url != expectedURL {
+					t.Errorf("Goroutine %d, call %d: expected %s, got %s", goroutineID, j, expectedURL, url)
+				}
+
+				taskID := fmt.Sprintf("task-%d", goroutineID%10)
+				taskURL := client.getTaskURL(taskID)
+
+				expectedTaskURL := fmt.Sprintf("https://kms.example.com/api/v1/tasks/%s", taskID)
+				if taskURL != expectedTaskURL {
+					t.Errorf("Goroutine %d, task call %d: expected %s, got %s", goroutineID, j, expectedTaskURL, taskURL)
+				}
+			}
+			done <- true
+		}(i)
+	}
+
+	// Wait for all goroutines to complete
+	for i := 0; i < numGoroutines; i++ {
+		<-done
+	}
+}
+
+func TestClient_WaitForTaskCompletion_ContextCancellation(t *testing.T) {
+	cfg := &config.KMSConfig{
+		Endpoint:    "https://kms.example.com",
+		AccessKeyID: "AK1234567890",
+		SecretKey:   "test-secret-key",
+		KeyID:       "test-key-id",
+	}
+
+	client := NewClient(cfg, defaultLogger())
+
+	// 创建总是返回PENDING_APPROVAL的服务器
+	pendingServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		resp := TaskResult{
+			Status: TaskStatusPendingApproval,
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(resp)
+	}))
+	defer pendingServer.Close()
+
+	client.kmsConfig.Endpoint = pendingServer.URL
+
+	t.Run("context cancellation during polling", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+
+		// 在后台启动轮询
+		done := make(chan error, 1)
+		go func() {
+			_, err := client.WaitForTaskCompletion(ctx, "task-cancel-test", 100*time.Millisecond)
+			done <- err
+		}()
+
+		// 等待第一个轮询完成
+		time.Sleep(150 * time.Millisecond)
+
+		// 取消上下文
+		cancel()
+
+		// 等待函数返回
+		select {
+		case err := <-done:
+			if err == nil {
+				t.Error("Expected cancellation error")
+			}
+			if !strings.Contains(err.Error(), "context canceled") {
+				t.Errorf("Expected context canceled error, got: %v", err)
+			}
+		case <-time.After(2 * time.Second):
+			t.Error("Function did not return after context cancellation")
+		}
+	})
+
+	t.Run("context timeout", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
+		defer cancel()
+
+		_, err := client.WaitForTaskCompletion(ctx, "task-timeout-test", 100*time.Millisecond)
+		if err == nil {
+			t.Error("Expected timeout error")
+		}
+		if !strings.Contains(err.Error(), "deadline exceeded") {
+			t.Errorf("Expected deadline exceeded error, got: %v", err)
+		}
 	})
 }

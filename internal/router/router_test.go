@@ -4,6 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/mowind/web3signer-go/internal/jsonrpc"
@@ -371,5 +375,154 @@ func TestRouter_Unregister(t *testing.T) {
 
 	if router.HasHandler("test_method") {
 		t.Error("Expected method to be unregistered")
+	}
+}
+
+func TestRouter_MaxRequestSize(t *testing.T) {
+	logger := logrus.New()
+	router := NewRouterWithMaxSize(logger, 1024) // 1KB limit for testing
+
+	// Register handler
+	handler := &mockHandler{method: "test_method"}
+	if err := router.Register(handler); err != nil {
+		t.Fatalf("Failed to register handler: %v", err)
+	}
+
+	tests := []struct {
+		name          string
+		requestSize   int
+		expectSuccess bool
+	}{
+		{
+			name:          "request within limit (512 bytes)",
+			requestSize:   512,
+			expectSuccess: true,
+		},
+		{
+			name:          "request exceeds limit (2KB)",
+			requestSize:   2048,
+			expectSuccess: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Create request body
+			body := make([]byte, tt.requestSize)
+			for i := range body {
+				body[i] = ' '
+			}
+			jsonReq := fmt.Sprintf(`{"jsonrpc":"2.0","id":1,"method":"test_method","params":[]}%s`, string(body))
+
+			// Create HTTP request
+			req, err := http.NewRequest("POST", "/", strings.NewReader(jsonReq))
+			if err != nil {
+				t.Fatalf("Failed to create request: %v", err)
+			}
+			req.Header.Set("Content-Type", "application/json")
+
+			// Create response recorder
+			w := httptest.NewRecorder()
+
+			// Handle request
+			router.HandleHTTPRequest(w, req)
+
+			// Check response
+			resp := w.Result()
+			defer func() {
+				_ = resp.Body.Close()
+			}()
+
+			if tt.expectSuccess {
+				if resp.StatusCode != http.StatusOK {
+					bodyBytes, _ := io.ReadAll(resp.Body)
+					t.Errorf("Expected status 200, got %d. Body: %s", resp.StatusCode, string(bodyBytes))
+				}
+			} else {
+				if resp.StatusCode != http.StatusRequestEntityTooLarge {
+					bodyBytes, _ := io.ReadAll(resp.Body)
+					t.Errorf("Expected status 413, got %d. Body: %s", resp.StatusCode, string(bodyBytes))
+				}
+			}
+		})
+	}
+}
+
+func TestRouter_RouteAndRouteWithContext(t *testing.T) {
+	logger := logrus.New()
+	router := NewRouter(logger)
+
+	handler := &mockHandler{
+		method: "test_method",
+		handleFunc: func(ctx context.Context, req *jsonrpc.Request) (*jsonrpc.Response, error) {
+			return jsonrpc.NewResponse(req.ID, "test_result")
+		},
+	}
+	if err := router.Register(handler); err != nil {
+		t.Fatalf("Failed to register handler: %v", err)
+	}
+
+	tests := []struct {
+		name    string
+		method  string
+		wantErr bool
+	}{
+		{
+			name:    "registered method",
+			method:  "test_method",
+			wantErr: false,
+		},
+		{
+			name:    "unregistered method",
+			method:  "unknown_method",
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			request := &jsonrpc.Request{
+				JSONRPC: "2.0",
+				Method:  tt.method,
+				ID:      "test_id",
+			}
+
+			ctx := context.Background()
+			loggerEntry := logger.WithField("test", "value")
+
+			response1 := router.Route(ctx, request)
+			response2 := router.RouteWithContext(ctx, request, loggerEntry)
+
+			if response1.Error != nil && response2.Error != nil {
+				if response1.Error.Code != response2.Error.Code {
+					t.Errorf("Error codes mismatch: Route=%v, RouteWithContext=%v", response1.Error.Code, response2.Error.Code)
+				}
+				if response1.Error.Message != response2.Error.Message {
+					t.Errorf("Error messages mismatch: Route=%v, RouteWithContext=%v", response1.Error.Message, response2.Error.Message)
+				}
+			} else if response1.Error != nil || response2.Error != nil {
+				t.Errorf("One method returned error, the other didn't: Route error=%v, RouteWithContext error=%v", response1.Error, response2.Error)
+			}
+
+			if tt.wantErr {
+				if response1.Error == nil {
+					t.Error("Route: expected error, got nil")
+				}
+				if response2.Error == nil {
+					t.Error("RouteWithContext: expected error, got nil")
+				}
+			} else {
+				if response1.Error != nil {
+					t.Errorf("Route: unexpected error: %v", response1.Error)
+				}
+				if response2.Error != nil {
+					t.Errorf("RouteWithContext: unexpected error: %v", response2.Error)
+				}
+			}
+
+			if response1.ID != response2.ID {
+				t.Errorf("Response IDs mismatch: Route=%v, RouteWithContext=%v", response1.ID, response2.ID)
+			}
+		})
 	}
 }
