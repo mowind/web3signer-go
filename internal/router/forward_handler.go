@@ -11,29 +11,30 @@ import (
 
 // ForwardHandler 处理转发到下游服务的 JSON-RPC 方法
 //
-// # ForwardHandler 处理转发到下游服务的 JSON-RPC 方法
-//
-// ForwardHandler 处理转发到下游服务的 JSON-RPC 方法
-//
-//lint:ignore SA1019 // downstream.ClientInterface is used for backward compatibility
-//lint:ignore SA1019 // downstream.ClientInterface is used for backward compatibility
-//lint:ignore SA1019 // downstream.ClientInterface is used for backward compatibility
+// ForwardHandler 充当透明代理，将非签名相关的 JSON-RPC 请求转发到下游节点。
+// 它特殊处理 eth_accounts 方法（返回空数组），并支持批量请求转发以优化性能。
 type ForwardHandler struct {
 	*BaseHandler
 	client downstream.ClientInterface
 }
 
 // NewForwardHandler 创建转发处理器
-func NewForwardHandler(client downstream.ClientInterface, logger *logrus.Logger) *ForwardHandler { //nolint:staticcheck // SA1019: backward compatibility
+func NewForwardHandler(client downstream.ClientInterface, logger *logrus.Logger) *ForwardHandler {
 	return &ForwardHandler{
 		BaseHandler: NewBaseHandler("forward", logger),
 		client:      client,
 	}
 }
 
+// Client returns the downstream client used by this handler.
+// This method is used for batch forwarding optimizations.
+func (h *ForwardHandler) Client() downstream.ClientInterface {
+	return h.client
+}
+
 // Method 返回处理器支持的方法名
 func (h *ForwardHandler) Method() string {
-	return "forward_handler" // 这个处理器处理所有不支持的方法
+	return "forward_handler"
 }
 
 // Handle 处理 JSON-RPC 请求
