@@ -518,7 +518,8 @@ func (r *Router) handleBatchWithForwarding(w http.ResponseWriter, req *http.Requ
 		}
 
 		response, err := handler.Handle(ctx, &requests[idx])
-		if err != nil {
+		switch {
+		case err != nil:
 			if jsonErr, ok := err.(*jsonrpc.Error); ok {
 				responses[idx] = jsonrpc.NewErrorResponse(requests[idx].ID, jsonErr)
 			} else {
@@ -528,9 +529,9 @@ func (r *Router) handleBatchWithForwarding(w http.ResponseWriter, req *http.Requ
 					err.Error(),
 				))
 			}
-		} else if response == nil {
+		case response == nil:
 			responses[idx] = jsonrpc.NewErrorResponse(requests[idx].ID, jsonrpc.InternalError)
-		} else {
+		default:
 			response.ID = requests[idx].ID
 			response.JSONRPC = jsonrpc.JSONRPCVersion
 			responses[idx] = response
