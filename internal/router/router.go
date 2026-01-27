@@ -445,12 +445,121 @@ func (r *Router) parseAndRoute(w http.ResponseWriter, req *http.Request, logger 
 		return
 	}
 
+	// If we have default handler and it supports batch forwarding, use optimized batch handling
+	if r.defaultHandler != nil {
+		// Check if default handler is ForwardHandler by inspecting its method
+		if fwdHandler, ok := r.defaultHandler.(*ForwardHandler); ok {
+			r.handleBatchWithForwarding(w, req, logger, requests, fwdHandler)
+			return
+		}
+	}
+
+	// Fallback to sequential processing for single request or non-forward handlers
 	responses := make([]*jsonrpc.Response, 0, len(requests))
 	for i := range requests {
 		resp := r.RouteWithContext(req.Context(), &requests[i], logger)
 		responses = append(responses, resp)
 	}
 
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	data, err := jsonrpc.MarshalResponses(responses)
+	if err != nil {
+		logger.WithError(err).Error("Failed to marshal JSON-RPC responses")
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	if _, err := w.Write(data); err != nil {
+		logger.WithError(err).Error("Failed to write response")
+	}
+}
+
+// handleBatchWithForwarding processes batch requests by separating sign and forward requests
+// for optimized batch forwarding to downstream services.
+//
+// It routes sign requests through registered handlers and forwards other requests
+// in bulk to the downstream service, preserving request order in responses.
+func (r *Router) handleBatchWithForwarding(w http.ResponseWriter, req *http.Request, logger *logrus.Entry, requests []jsonrpc.Request, fwdHandler *ForwardHandler) {
+	if len(requests) == 0 {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		resp := jsonrpc.NewErrorResponse(nil, jsonrpc.InvalidRequestError)
+		data, _ := jsonrpc.MarshalResponse(resp)
+		if _, err := w.Write(data); err != nil {
+			logger.WithError(err).Error("Failed to write response")
+		}
+		return
+	}
+
+	// Create response array to maintain order
+	responses := make([]*jsonrpc.Response, len(requests))
+
+	// Split requests into sign requests and forward requests
+	signIndices := make([]int, 0)
+	forwardIndices := make([]int, 0)
+	forwardRequests := make([]jsonrpc.Request, 0)
+
+	for i, request := range requests {
+		if IsSignMethod(request.Method) {
+			signIndices = append(signIndices, i)
+		} else {
+			forwardIndices = append(forwardIndices, i)
+			forwardRequests = append(forwardRequests, request)
+		}
+	}
+
+	// Process sign requests sequentially
+	ctx := req.Context()
+	for _, idx := range signIndices {
+		handler, found := r.getHandler(requests[idx].Method)
+		if !found {
+			responses[idx] = jsonrpc.NewErrorResponse(requests[idx].ID, jsonrpc.MethodNotFoundError)
+			continue
+		}
+
+		response, err := handler.Handle(ctx, &requests[idx])
+		if err != nil {
+			if jsonErr, ok := err.(*jsonrpc.Error); ok {
+				responses[idx] = jsonrpc.NewErrorResponse(requests[idx].ID, jsonErr)
+			} else {
+				responses[idx] = jsonrpc.NewErrorResponse(requests[idx].ID, jsonrpc.NewServerError(
+					jsonrpc.CodeInternalError,
+					"Internal server error",
+					err.Error(),
+				))
+			}
+		} else if response == nil {
+			responses[idx] = jsonrpc.NewErrorResponse(requests[idx].ID, jsonrpc.InternalError)
+		} else {
+			response.ID = requests[idx].ID
+			response.JSONRPC = jsonrpc.JSONRPCVersion
+			responses[idx] = response
+		}
+	}
+
+	// Process forward requests in batch if there are any
+	if len(forwardRequests) > 0 {
+		downstreamClient := fwdHandler.Client()
+		if batchResponses, err := downstreamClient.ForwardBatchRequest(ctx, forwardRequests); err == nil {
+			for i, idx := range forwardIndices {
+				if i < len(batchResponses) {
+					responses[idx] = &batchResponses[i]
+				} else {
+					responses[idx] = jsonrpc.NewErrorResponse(requests[idx].ID, jsonrpc.InternalError)
+				}
+			}
+		} else {
+			for _, idx := range forwardIndices {
+				responses[idx] = jsonrpc.NewErrorResponse(requests[idx].ID, jsonrpc.NewServerError(
+					jsonrpc.CodeInternalError,
+					"Failed to forward batch request",
+					err.Error(),
+				))
+			}
+		}
+	}
+
+	// Write response
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	data, err := jsonrpc.MarshalResponses(responses)
