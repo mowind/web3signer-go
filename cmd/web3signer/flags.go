@@ -59,7 +59,7 @@ var flags = []Flag{
 	{
 		Name:         "cors-allowed-origins",
 		DefaultValue: []string{},
-		Description:  "CORS allowed origins (comma-separated), empty means allow all",
+		Description:  "CORS allowed origins (comma-separated), use '*' to allow all origins, empty means localhost only",
 		BindTo:       "http.allowed-origins",
 	},
 

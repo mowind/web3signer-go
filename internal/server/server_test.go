@@ -254,8 +254,8 @@ func TestBuilder_createGinRouter_handleJSONRPCRequest(t *testing.T) {
 		}
 
 		corsHeader := w.Header().Get("Access-Control-Allow-Origin")
-		if corsHeader != "*" {
-			t.Errorf("Expected Access-Control-Allow-Origin *, got %s", corsHeader)
+		if corsHeader != "" {
+			t.Errorf("Expected no Access-Control-Allow-Origin header for request without Origin, got %s", corsHeader)
 		}
 	})
 }
@@ -275,6 +275,10 @@ func TestBuilder_createGinRouter_Build(t *testing.T) {
 	defer mockDownstream.Close()
 
 	cfg := &config.Config{
+		HTTP: config.HTTPConfig{
+			Host: "localhost",
+			Port: 9000,
+		},
 		KMS: config.KMSConfig{
 			Endpoint:    "http://localhost:8080",
 			AccessKeyID: "ak",

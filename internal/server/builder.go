@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math/big"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -69,6 +70,7 @@ func (b *Builder) WithTLSAutoRedirect(enable bool) *Builder {
 // Build creates and configures a ready-to-start server.
 //
 // This method:
+//   - Validates configuration
 //   - Sets up logging
 //   - Creates HTTP and JSON-RPC clients
 //   - Creates and configures Gin router
@@ -77,6 +79,11 @@ func (b *Builder) WithTLSAutoRedirect(enable bool) *Builder {
 // Returns:
 //   - *Server: A fully configured server instance
 func (b *Builder) Build() *Server {
+	if err := b.cfg.Validate(); err != nil {
+		fmt.Fprintf(os.Stderr, "Configuration validation failed: %v\n", err)
+		os.Exit(1)
+	}
+
 	b.setGinMode()
 
 	logger := b.createLogger()
@@ -282,17 +289,26 @@ func (b *Builder) corsMiddleware() gin.HandlerFunc {
 		origin := c.Request.Header.Get("Origin")
 		allowedOrigins := b.cfg.HTTP.AllowedOrigins
 
-		// 如果 AllowedOrigins 为空，允许所有源（向后兼容）
-		if len(allowedOrigins) == 0 {
-			c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
-		} else if origin != "" && b.isOriginAllowed(origin, allowedOrigins) {
+		// Debug日志（仅在debug级别记录）
+		if b.logger != nil && b.logger.IsLevelEnabled(logrus.DebugLevel) {
+			b.logger.WithFields(logrus.Fields{
+				"origin":            origin,
+				"allowed_origins":   fmt.Sprintf("%v", allowedOrigins),
+				"is_origin_allowed": b.isOriginAllowed(origin, allowedOrigins),
+			}).Debug("CORS check")
+		}
+
+		// 设置允许的方法和头（预检请求必需）
+		c.Writer.Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS")
+		c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+
+		// 如果origin在允许列表中，设置CORS头
+		if origin != "" && b.isOriginAllowed(origin, allowedOrigins) {
 			c.Writer.Header().Set("Access-Control-Allow-Origin", origin)
 			c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
 		}
 
-		c.Writer.Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS")
-		c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
-
+		// 处理OPTIONS预检请求
 		if c.Request.Method == "OPTIONS" {
 			c.AbortWithStatus(204)
 			return

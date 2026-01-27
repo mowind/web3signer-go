@@ -661,54 +661,30 @@ func (r *Router) HandleHTTPRequest(w http.ResponseWriter, req *http.Request) {
 // parseAndRouteSimple parses and routes requests using the router's default logger.
 //
 // This is a helper method used by HandleHTTPRequest.
+// It delegates to parseAndRoute for code reuse and to enable batch forwarding optimizations.
 //
 // Parameters:
 //   - w: HTTP response writer
 //   - req: HTTP request
 //   - body: The request body content
 func (r *Router) parseAndRouteSimple(w http.ResponseWriter, req *http.Request, body []byte) {
+	// Parse request to extract fields for logger context
 	requests, err := jsonrpc.ParseRequest(body)
 	if err != nil {
-		r.logger.WithError(err).Warn("Failed to parse JSON-RPC request")
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		resp := jsonrpc.NewErrorResponse(nil, jsonrpc.ParseError)
-		data, _ := jsonrpc.MarshalResponse(resp)
-		if _, err := w.Write(data); err != nil {
-			r.logger.WithError(err).Error("Failed to write error response")
-		}
+		// Create logger entry without request fields for error case
+		logger := r.logger.WithError(err)
+		r.parseAndRoute(w, req, logger, body)
 		return
 	}
 
-	if len(requests) > MaxBatchSize {
-		r.logger.WithField("count", len(requests)).Warn("Batch size exceeds limit")
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		resp := jsonrpc.NewErrorResponse(nil, jsonrpc.NewServerError(
-			-32602, "Invalid params", fmt.Sprintf("Batch size exceeds maximum limit of %d", MaxBatchSize)),
-		)
-		data, _ := jsonrpc.MarshalResponse(resp)
-		if _, err := w.Write(data); err != nil {
-			r.logger.WithError(err).Error("Failed to write error response")
-		}
-		return
+	// Create logger entry with request fields for normal case
+	method := ""
+	if len(requests) > 0 {
+		method = requests[0].Method
 	}
+	logger := r.logger.WithFields(logrus.Fields{
+		"method": method,
+	})
 
-	responses := make([]*jsonrpc.Response, 0, len(requests))
-	for i := range requests {
-		resp := r.Route(req.Context(), &requests[i])
-		responses = append(responses, resp)
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	data, err := jsonrpc.MarshalResponses(responses)
-	if err != nil {
-		r.logger.WithError(err).Error("Failed to marshal JSON-RPC responses")
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
-	if _, err := w.Write(data); err != nil {
-		r.logger.WithError(err).Error("Failed to write response")
-	}
+	r.parseAndRoute(w, req, logger, body)
 }

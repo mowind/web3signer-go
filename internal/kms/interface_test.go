@@ -3,10 +3,12 @@ package kms
 import (
 	"context"
 	"encoding/json"
+	"math/big"
 	"testing"
 	"time"
 
 	"github.com/mowind/web3signer-go/internal/config"
+	"github.com/umbracle/ethgo"
 )
 
 type mockClient struct {
@@ -102,21 +104,35 @@ func TestMPCKMSSigner_SignTransaction(t *testing.T) {
 	tests := []struct {
 		name        string
 		keyID       string
-		transaction []byte
+		tx          *ethgo.Transaction
 		expectedSig []byte
 		shouldError bool
 	}{
 		{
-			name:        "successful transaction signature",
-			keyID:       "test-key-id",
-			transaction: []byte("0x1234567890abcdef"),
+			name:  "successful transaction signature",
+			keyID: "test-key-id",
+			tx: &ethgo.Transaction{
+				Type:     ethgo.TransactionLegacy,
+				Nonce:    0,
+				GasPrice: 20000000000,
+				Gas:      21000,
+				To:       addressPtr(ethgo.HexToAddress("0x2222222222222222222222222222222222222222")),
+				Value:    big.NewInt(1000000000000000000),
+			},
 			expectedSig: []byte("0xabcdef1234567890"),
 			shouldError: false,
 		},
 		{
-			name:        "hex encoded transaction",
-			keyID:       "test-key-id",
-			transaction: []byte("deadbeef"),
+			name:  "hex encoded transaction",
+			keyID: "test-key-id",
+			tx: &ethgo.Transaction{
+				Type:     ethgo.TransactionLegacy,
+				Nonce:    1,
+				GasPrice: 20000000000,
+				Gas:      21000,
+				To:       addressPtr(ethgo.HexToAddress("0x3333333333333333333333333333333333333333")),
+				Value:    big.NewInt(500000000000000000),
+			},
 			expectedSig: []byte("0xsignature"),
 			shouldError: false,
 		},
@@ -124,13 +140,15 @@ func TestMPCKMSSigner_SignTransaction(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			encoded, err := tt.tx.MarshalRLPTo(nil)
+			if err != nil {
+				t.Fatalf("Failed to encode transaction: %v", err)
+			}
+
 			mock := &mockClient{
 				signWithOptionsFunc: func(ctx context.Context, keyID string, message []byte, encoding DataEncoding, summary *SignSummary, callbackURL string) ([]byte, error) {
 					if keyID != tt.keyID {
 						t.Errorf("Expected keyID %s, got %s", tt.keyID, keyID)
-					}
-					if string(message) != string(tt.transaction) {
-						t.Errorf("Expected transaction %s, got %s", tt.transaction, message)
 					}
 					if encoding != DataEncodingHex {
 						t.Errorf("Expected encoding HEX, got %s", encoding)
@@ -145,7 +163,7 @@ func TestMPCKMSSigner_SignTransaction(t *testing.T) {
 			}
 
 			signer := NewMPCKMSSigner(mock, tt.keyID)
-			signature, err := signer.SignTransaction(context.Background(), tt.transaction)
+			signature, err := signer.SignTransaction(context.Background(), encoded)
 
 			if tt.shouldError && err == nil {
 				t.Error("Expected error but got none")

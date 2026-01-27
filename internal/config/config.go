@@ -35,7 +35,7 @@ type HTTPConfig struct {
 	TLSKeyFile       string   `mapstructure:"tls-key-file"`
 	TLSAutoRedirect  bool     `mapstructure:"tls-auto-redirect"`
 	MaxRequestSizeMB int64    `mapstructure:"max-request-size-mb"` // 最大请求体大小（MB），用于防止DoS攻击
-	AllowedOrigins   []string `mapstructure:"allowed-origins"`     // CORS 允许的源列表，空列表表示允许所有源
+	AllowedOrigins   []string `mapstructure:"allowed-origins"`     // CORS 允许的源列表，支持 "*" 允许所有源
 }
 
 // Validate 验证 HTTP 配置
@@ -65,6 +65,12 @@ func (c *HTTPConfig) Validate() error {
 	if c.MaxRequestSizeMB <= 0 {
 		c.MaxRequestSizeMB = 10
 	}
+
+	// 设置安全的默认CORS允许源
+	if len(c.AllowedOrigins) == 0 {
+		c.AllowedOrigins = []string{"http://localhost:*", "http://127.0.0.1:*"}
+	}
+
 	return nil
 }
 

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -574,4 +575,24 @@ func newValidatedClient(t *testing.T, cfg *config.DownstreamConfig) *Client {
 		t.Fatalf("Config validation failed: %v", err)
 	}
 	return NewClient(&configCopy, logrus.New())
+}
+
+// BenchmarkCompareIDs_ToString benchmarks toString function
+func BenchmarkCompareIDs_ToString(b *testing.B) {
+	id := 12345
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		s := toString(id)
+		_ = s == "12345"
+	}
+}
+
+// BenchmarkCompareIDs_Sprintf benchmarks fmt.Sprintf function
+func BenchmarkCompareIDs_Sprintf(b *testing.B) {
+	id := 12345
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		s := fmt.Sprintf("%v", id)
+		_ = s == "12345"
+	}
 }

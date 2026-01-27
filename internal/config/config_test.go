@@ -662,6 +662,73 @@ func TestHTTPConfig_Validate_TLSFileExistence(t *testing.T) {
 	}
 }
 
+func TestHTTPConfig_Validate_CORSDefaults(t *testing.T) {
+	tests := []struct {
+		name            string
+		config          HTTPConfig
+		expectedOrigins []string
+	}{
+		{
+			name: "sets safe defaults when AllowedOrigins is empty",
+			config: HTTPConfig{
+				Host: "localhost",
+				Port: 8080,
+			},
+			expectedOrigins: []string{"http://localhost:*", "http://127.0.0.1:*"},
+		},
+		{
+			name: "preserves explicit allowed origins",
+			config: HTTPConfig{
+				Host:           "localhost",
+				Port:           8080,
+				AllowedOrigins: []string{"https://example.com"},
+			},
+			expectedOrigins: []string{"https://example.com"},
+		},
+		{
+			name: "preserves wildcard for allow all",
+			config: HTTPConfig{
+				Host:           "localhost",
+				Port:           8080,
+				AllowedOrigins: []string{"*"},
+			},
+			expectedOrigins: []string{"*"},
+		},
+		{
+			name: "preserves multiple allowed origins",
+			config: HTTPConfig{
+				Host:           "localhost",
+				Port:           8080,
+				AllowedOrigins: []string{"https://example.com", "https://api.example.com"},
+			},
+			expectedOrigins: []string{"https://example.com", "https://api.example.com"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := tt.config.Validate()
+			if err != nil {
+				t.Errorf("HTTPConfig.Validate() unexpected error = %v", err)
+			}
+
+			if len(tt.config.AllowedOrigins) != len(tt.expectedOrigins) {
+				t.Errorf("AllowedOrigins length = %d, want %d", len(tt.config.AllowedOrigins), len(tt.expectedOrigins))
+			}
+
+			for i, expected := range tt.expectedOrigins {
+				if i >= len(tt.config.AllowedOrigins) {
+					t.Errorf("AllowedOrigins[%d] not found", i)
+					continue
+				}
+				if tt.config.AllowedOrigins[i] != expected {
+					t.Errorf("AllowedOrigins[%d] = %s, want %s", i, tt.config.AllowedOrigins[i], expected)
+				}
+			}
+		})
+	}
+}
+
 func createTempFile(t *testing.T, name string, content []byte) string {
 	t.Helper()
 	dir := t.TempDir()

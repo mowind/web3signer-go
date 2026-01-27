@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/mowind/web3signer-go/internal/config"
@@ -207,6 +208,36 @@ func (c *Client) ForwardBatchRequest(ctx context.Context, requests []jsonrpc.Req
 	return jsonResponses, nil
 }
 
+// toString 高效地将不同类型转换为字符串
+func toString(id interface{}) string {
+	switch v := id.(type) {
+	case string:
+		return v
+	case int:
+		return strconv.Itoa(v)
+	case int64:
+		return strconv.FormatInt(v, 10)
+	case int32:
+		return strconv.FormatInt(int64(v), 10)
+	case uint:
+		return strconv.FormatUint(uint64(v), 10)
+	case uint64:
+		return strconv.FormatUint(v, 10)
+	case uint32:
+		return strconv.FormatUint(uint64(v), 10)
+	case float64:
+		return strconv.FormatFloat(v, 'f', -1, 64)
+	case float32:
+		return strconv.FormatFloat(float64(v), 'f', -1, 32)
+	case []byte:
+		return string(v)
+	case nil:
+		return ""
+	default:
+		return fmt.Sprintf("%v", v)
+	}
+}
+
 // compareIDs 比较两个JSON-RPC ID值是否相等
 func compareIDs(id1, id2 interface{}) bool {
 	// 如果都是nil，相等
@@ -236,7 +267,7 @@ func compareIDs(id1, id2 interface{}) bool {
 	}
 
 	// 降级到字符串比较(兼容不同类型)
-	return fmt.Sprintf("%v", id1) == fmt.Sprintf("%v", id2)
+	return toString(id1) == toString(id2)
 }
 
 // TestConnection tests connectivity to downstream Ethereum node.

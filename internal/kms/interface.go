@@ -50,14 +50,9 @@ func (s *MPCKMSSigner) SignMessage(ctx context.Context, message []byte) ([]byte,
 
 // SignTransaction 对交易进行签名
 func (s *MPCKMSSigner) SignTransaction(ctx context.Context, transactionData []byte) ([]byte, error) {
-	// 创建交易摘要
-	summary := &SignSummary{
-		Type: string(SummaryTypeTransfer),
-		// TODO: 从交易数据中提取 from, to, amount, token 等信息
-		From:   "0x0000000000000000000000000000000000000000",
-		To:     "0x0000000000000000000000000000000000000000",
-		Amount: "0",
-		Token:  "ETH",
+	summary, err := ParseTransactionSummary(transactionData)
+	if err != nil {
+		return nil, err
 	}
 
 	return s.client.SignWithOptions(ctx, s.keyID, transactionData, DataEncodingHex, summary, "")

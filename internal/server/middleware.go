@@ -17,11 +17,24 @@ func AuthMiddleware(enabled bool, secret string, whitelist []string) gin.Handler
 		}
 
 		path := c.Request.URL.Path
+
+		// 安全的前缀匹配：路径必须精确匹配白名单项，或者是其子路径（以 '/' 分隔）
+		// 例如：/api 匹配 /api 和 /api/sub，但不匹配 /api-private 或 /apiadmin
 		for _, whitelistedPath := range whitelist {
-			if strings.HasPrefix(path, whitelistedPath) {
-				if whitelistedPath == "/" && path != "/" {
-					continue
+			// 根路径 "/" 只精确匹配自身
+			if whitelistedPath == "/" {
+				if path == "/" {
+					c.Next()
+					return
 				}
+				continue
+			}
+
+			// 安全前缀匹配非根路径
+			if len(path) >= len(whitelistedPath) &&
+				path[:len(whitelistedPath)] == whitelistedPath &&
+				(len(path) == len(whitelistedPath) || path[len(whitelistedPath)] == '/') {
+				// 路径在白名单中，跳过认证
 				c.Next()
 				return
 			}

@@ -117,6 +117,7 @@ http:
   host: localhost
   port: 9000
   max-request-size-mb: 10
+  # allowed-origins: "https://example.com,https://api.example.com"  # Default: http://localhost:*,http://127.0.0.1:*
   tls-enabled: false
   # tls-cert-file: /path/to/cert.pem
   # tls-key-file: /path/to/key.pem
@@ -284,6 +285,7 @@ make build
 - `--http-host` - Server host (default: `localhost`)
 - `--http-port` - Server port (default: `9000`)
 - `--http-max-request-size` - Maximum request body size in MB (default: `10`)
+- `--http-allowed-origins` - CORS allowed origins (default: `http://localhost:*`, `http://127.0.0.1:*`; use `*` to allow all origins)
 - `--tls-enabled` - Enable TLS/HTTPS (default: `false`)
 - `--tls-cert-file` - Path to TLS certificate file (required if TLS enabled)
 - `--tls-key-file` - Path to TLS private key file (required if TLS enabled)
@@ -316,6 +318,7 @@ All configuration options can be set via environment variables using the `WEB3SI
 export WEB3SIGNER_HTTP_HOST=0.0.0.0
 export WEB3SIGNER_HTTP_PORT=9000
 export WEB3SIGNER_HTTP_MAX_REQUEST_SIZE_MB=10
+export WEB3SIGNER_HTTP_ALLOWED_ORIGINS="https://example.com,https://api.example.com"
 export WEB3SIGNER_TLS_ENABLED=false
 export WEB3SIGNER_AUTH_ENABLED=true
 export WEB3SIGNER_AUTH_SECRET=your_shared_secret

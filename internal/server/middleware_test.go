@@ -286,3 +286,120 @@ func TestAuthMiddleware_EmptyWhitelist(t *testing.T) {
 		t.Errorf("expected status %d with empty whitelist, got %d", http.StatusUnauthorized, w.Code)
 	}
 }
+
+func TestAuthMiddleware_SecurePathMatching(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	secret := "test-secret"
+	whitelist := []string{"/api", "/public"}
+
+	tests := []struct {
+		name           string
+		path           string
+		authHeader     string
+		expectedStatus int
+	}{
+		{
+			name:           "/api exact match",
+			path:           "/api",
+			authHeader:     "",
+			expectedStatus: http.StatusOK,
+		},
+		{
+			name:           "/api with trailing slash - subpath match",
+			path:           "/api/",
+			authHeader:     "",
+			expectedStatus: http.StatusOK,
+		},
+		{
+			name:           "/api/private - subpath match",
+			path:           "/api/private",
+			authHeader:     "",
+			expectedStatus: http.StatusOK,
+		},
+		{
+			name:           "/api/v1/users - subpath match",
+			path:           "/api/v1/users",
+			authHeader:     "",
+			expectedStatus: http.StatusOK,
+		},
+		{
+			name:           "/api-private - reject pseudo-path",
+			path:           "/api-private",
+			authHeader:     "",
+			expectedStatus: http.StatusUnauthorized,
+		},
+		{
+			name:           "/apiadmin - reject pseudo-path",
+			path:           "/apiadmin",
+			authHeader:     "",
+			expectedStatus: http.StatusUnauthorized,
+		},
+		{
+			name:           "/apis - reject pseudo-path",
+			path:           "/apis",
+			authHeader:     "",
+			expectedStatus: http.StatusUnauthorized,
+		},
+		{
+			name:           "/public exact match",
+			path:           "/public",
+			authHeader:     "",
+			expectedStatus: http.StatusOK,
+		},
+		{
+			name:           "/public/docs - subpath match",
+			path:           "/public/docs",
+			authHeader:     "",
+			expectedStatus: http.StatusOK,
+		},
+		{
+			name:           "/public-assets - reject pseudo-path",
+			path:           "/public-assets",
+			authHeader:     "",
+			expectedStatus: http.StatusUnauthorized,
+		},
+		{
+			name:           "/publications - reject pseudo-path",
+			path:           "/publications",
+			authHeader:     "",
+			expectedStatus: http.StatusUnauthorized,
+		},
+		{
+			name:           "/private needs auth",
+			path:           "/private",
+			authHeader:     "",
+			expectedStatus: http.StatusUnauthorized,
+		},
+		{
+			name:           "/private with valid auth",
+			path:           "/private",
+			authHeader:     "Bearer " + secret,
+			expectedStatus: http.StatusOK,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			router := gin.New()
+			router.Use(AuthMiddleware(true, secret, whitelist))
+
+			router.Any("/*path", func(c *gin.Context) {
+				c.JSON(http.StatusOK, gin.H{"message": "ok"})
+			})
+
+			req := httptest.NewRequest("GET", tt.path, nil)
+			if tt.authHeader != "" {
+				req.Header.Set("Authorization", tt.authHeader)
+			}
+
+			w := httptest.NewRecorder()
+			router.ServeHTTP(w, req)
+
+			if w.Code != tt.expectedStatus {
+				t.Errorf("expected status %d for path %s, got %d", tt.expectedStatus, tt.path, w.Code)
+				t.Errorf("response body: %s", w.Body.String())
+			}
+		})
+	}
+}
