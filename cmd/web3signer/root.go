@@ -27,7 +27,8 @@ It provides an HTTP JSON-RPC interface that:
 1. Signs transactions using MPC-KMS
 2. Forwards other JSON-RPC methods to a downstream service
 3. Supports eth_sign, eth_signTransaction, and eth_sendTransaction methods`,
-	Run: run,
+	Version: Version,
+	Run:     run,
 }
 
 // Execute 执行根命令

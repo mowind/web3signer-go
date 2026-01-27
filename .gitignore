@@ -7,7 +7,7 @@
 *.dll
 *.so
 *.dylib
-web3signer
+/web3signer
 
 # Test binary, built with `go test -c`
 *.test

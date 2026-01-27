@@ -1,13 +1,19 @@
-.PHONY: build clean test lint coverage help all check env
+.PHONY: build clean test lint coverage help all check env version-info
+
+# Version information
+VERSION ?= v0.1.0
+COMMIT ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo "dev")
+BUILD_TIME ?= $(shell date -u +"%Y-%m-%dT%H:%M:%SZ")
+LDFLAGS := -ldflags "-X main.Version=$(VERSION) -X main.Commit=$(COMMIT) -X main.BuildTime=$(BUILD_TIME)"
 
 # Default target
 all: build
 
 # Build the application
 build:
-	@echo "Building web3signer..."
+	@echo "Building web3signer $(VERSION)..."
 	@mkdir -p build
-	go build -o build/web3signer ./cmd/web3signer
+	go build $(LDFLAGS) -o build/web3signer ./cmd/web3signer
 	go build -o build/test-kms ./cmd/test-kms
 	@echo "Build complete: build/web3signer, build/test-kms"
 
@@ -62,6 +68,12 @@ env:
 	@echo "Checking development environment..."
 	@./scripts/check-env.sh
 
+# Show version information
+version-info:
+	@echo "Version:    $(VERSION)"
+	@echo "Commit:     $(COMMIT)"
+	@echo "Build Time: $(BUILD_TIME)"
+
 # Help target
 help:
 	@echo "Available targets:"
@@ -78,4 +90,5 @@ help:
 	@echo "  install-tools    - Install development tools"
 	@echo "  coverage         - Generate HTML coverage report"
 	@echo "  env              - Check development environment"
+	@echo "  version-info     - Show version information"
 	@echo "  help             - Show this help message"
