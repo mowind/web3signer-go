@@ -56,6 +56,12 @@ var flags = []Flag{
 		Description:  "Maximum request body size in MB (prevents DoS)",
 		BindTo:       "http.max-request-size-mb",
 	},
+	{
+		Name:         "cors-allowed-origins",
+		DefaultValue: []string{},
+		Description:  "CORS allowed origins (comma-separated), empty means allow all",
+		BindTo:       "http.allowed-origins",
+	},
 
 	// MPC-KMS 配置
 	{
@@ -142,6 +148,8 @@ func registerFlags(cmd *cobra.Command) error {
 			cmd.Flags().Int64(flag.Name, v, flag.Description)
 		case bool:
 			cmd.Flags().Bool(flag.Name, v, flag.Description)
+		case []string:
+			cmd.Flags().StringSlice(flag.Name, v, flag.Description)
 		default:
 			return fmt.Errorf("unsupported flag type: %T for flag %s", v, flag.Name)
 		}

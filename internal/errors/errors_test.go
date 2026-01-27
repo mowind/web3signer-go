@@ -486,10 +486,13 @@ func TestIsClientError(t *testing.T) {
 	}
 }
 
-func TestMustConvertError(t *testing.T) {
+func TestConvertErrorSafe(t *testing.T) {
 	// 测试正常转换
 	err := fmt.Errorf("test error")
-	result := MustConvertError(err)
+	result, errResult := ConvertErrorSafe(err)
+	if errResult != nil {
+		t.Fatalf("Expected nil error, got %v", errResult)
+	}
 	if result == nil {
 		t.Fatal("Expected non-nil result")
 	}
@@ -497,11 +500,12 @@ func TestMustConvertError(t *testing.T) {
 		t.Errorf("Expected type %s, got %s", ErrorTypeInternal, result.Type)
 	}
 
-	// 测试 nil 输入应该 panic
-	defer func() {
-		if r := recover(); r == nil {
-			t.Error("Expected panic for nil input")
-		}
-	}()
-	_ = MustConvertError(nil)
+	// 测试 nil 输入应该返回 nil, nil
+	result, errResult = ConvertErrorSafe(nil)
+	if errResult != nil {
+		t.Errorf("Expected nil error, got %v", errResult)
+	}
+	if result != nil {
+		t.Errorf("Expected nil result, got %v", result)
+	}
 }

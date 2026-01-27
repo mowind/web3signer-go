@@ -25,9 +25,8 @@ type Client struct {
 
 	// URL caching to avoid repeated string concatenation
 	signURL         string
-	signURLOnce     sync.Once
 	taskURLTemplate string
-	taskURLOnce     sync.Once
+	urlMu           sync.RWMutex
 }
 
 // NewClient creates a new MPC-KMS client with default HTTP client.
@@ -86,27 +85,49 @@ func NewClientWithLogger(kmsCfg *config.KMSConfig, logger *logrus.Logger, httpCl
 
 // resetURLCache resets the cached URLs. Used for testing when the endpoint changes.
 func (c *Client) resetURLCache() {
-	c.signURLOnce = sync.Once{}
-	c.taskURLOnce = sync.Once{}
+	c.urlMu.Lock()
+	defer c.urlMu.Unlock()
 	c.signURL = ""
 	c.taskURLTemplate = ""
 }
 
 // getSignURL returns the pre-computed sign endpoint URL with lazy initialization.
-// Thread-safe via sync.Once.
+// Thread-safe via sync.RWMutex.
 func (c *Client) getSignURL(keyID string) string {
-	c.signURLOnce.Do(func() {
+	c.urlMu.RLock()
+	if c.signURL != "" {
+		defer c.urlMu.RUnlock()
+		return fmt.Sprintf("%s%s/sign", c.signURL, keyID)
+	}
+	c.urlMu.RUnlock()
+
+	c.urlMu.Lock()
+	defer c.urlMu.Unlock()
+
+	// Double check
+	if c.signURL == "" {
 		c.signURL = fmt.Sprintf("%s/api/v1/keys/", c.kmsConfig.Endpoint)
-	})
+	}
 	return fmt.Sprintf("%s%s/sign", c.signURL, keyID)
 }
 
 // getTaskURL returns the pre-computed task endpoint URL with lazy initialization.
-// Thread-safe via sync.Once.
+// Thread-safe via sync.RWMutex.
 func (c *Client) getTaskURL(taskID string) string {
-	c.taskURLOnce.Do(func() {
+	c.urlMu.RLock()
+	if c.taskURLTemplate != "" {
+		defer c.urlMu.RUnlock()
+		return fmt.Sprintf("%s%s", c.taskURLTemplate, taskID)
+	}
+	c.urlMu.RUnlock()
+
+	c.urlMu.Lock()
+	defer c.urlMu.Unlock()
+
+	// Double check
+	if c.taskURLTemplate == "" {
 		c.taskURLTemplate = fmt.Sprintf("%s/api/v1/tasks/", c.kmsConfig.Endpoint)
-	})
+	}
 	return fmt.Sprintf("%s%s", c.taskURLTemplate, taskID)
 }
 

@@ -180,12 +180,13 @@ func ConvertError(err error) *AppError {
 	return Wrap(err, ErrorTypeInternal, jsonrpc.CodeInternalError, "Internal error")
 }
 
-// MustConvertError 转换错误，如果为 nil 则 panic
-func MustConvertError(err error) *AppError {
+// ConvertErrorSafe 转换错误，如果转换失败或为 nil 则返回错误
+func ConvertErrorSafe(err error) (*AppError, error) {
 	if err == nil {
-		panic("MustConvertError: err cannot be nil")
+		return nil, nil
 	}
-	return ConvertError(err)
+	appErr := ConvertError(err)
+	return appErr, nil
 }
 
 // ConvertToJSONRPC 快速转换为 JSON-RPC 错误

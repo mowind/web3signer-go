@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/mowind/web3signer-go/internal/config"
+	"github.com/mowind/web3signer-go/internal/utils"
 	"github.com/sirupsen/logrus"
 )
 
@@ -40,21 +41,9 @@ func NewHTTPClient(kmsCfg *config.KMSConfig, logger *logrus.Logger) *HTTPClient 
 		kmsConfig: kmsCfg,
 		httpClient: &http.Client{
 			Timeout:   30 * time.Second,
-			Transport: createTransport(),
+			Transport: utils.CreateTransport(100, 90*time.Second),
 		},
 		logger: logger,
-	}
-}
-
-// createTransport 创建HTTP传输配置，用于优化连接池性能
-func createTransport() *http.Transport {
-	return &http.Transport{
-		MaxIdleConns:          100,
-		MaxIdleConnsPerHost:   100,
-		IdleConnTimeout:       90 * time.Second,
-		ResponseHeaderTimeout: 10 * time.Second,
-		DisableCompression:    false,
-		DisableKeepAlives:     false,
 	}
 }
 

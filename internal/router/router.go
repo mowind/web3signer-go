@@ -79,12 +79,27 @@ func NewRouterWithMaxSize(logger *logrus.Logger, maxRequestSize int64) *Router {
 	}
 }
 
-// NewRouterWithContext 创建新的 JSON-RPC 路由器,使用 Entry 类型 logger
-func NewRouterWithContext(logger *logrus.Entry) *Router {
+// NewRouterWithContext creates a new JSON-RPC router with the provided logger entry.
+//
+// This allows the router to share context fields from the parent logger.
+//
+// Parameters:
+//   - logger: The logrus entry to use
+//
+// Returns:
+//   - *Router: A new router instance
+func (r *Router) NewRouterWithContext(logger *logrus.Entry) *Router {
 	return NewRouterWithContextAndMaxSize(logger, 10*1024*1024)
 }
 
-// NewRouterWithContextAndMaxSize 创建新的 JSON-RPC 路由器,使用 Entry 类型 logger 并指定最大请求体大小
+// NewRouterWithContextAndMaxSize creates a new router with context logger and size limit.
+//
+// Parameters:
+//   - logger: The logrus entry to use
+//   - maxRequestSize: Maximum allowed request body size in bytes
+//
+// Returns:
+//   - *Router: A new router instance
 func NewRouterWithContextAndMaxSize(logger *logrus.Entry, maxRequestSize int64) *Router {
 	return &Router{
 		handlers:       make(map[string]Handler),
@@ -147,7 +162,17 @@ func (r *Router) Unregister(method string) {
 	r.logger.WithField("method", method).Info("Unregistered JSON-RPC handler")
 }
 
-// routeRequest 辅助函数：处理单个JSON-RPC请求的路由逻辑
+// routeRequest is a helper function that handles routing logic for a single request.
+//
+// It performs handler lookup, execution, and error handling.
+//
+// Parameters:
+//   - ctx: Request context
+//   - request: The JSON-RPC request
+//   - logger: Context-aware logger
+//
+// Returns:
+//   - *jsonrpc.Response: The execution result
 func (r *Router) routeRequest(ctx context.Context, request *jsonrpc.Request, logger *logrus.Entry) *jsonrpc.Response {
 	if request == nil {
 		return jsonrpc.NewErrorResponse(nil, jsonrpc.InvalidRequestError)
@@ -196,7 +221,17 @@ func (r *Router) routeRequest(ctx context.Context, request *jsonrpc.Request, log
 	return response
 }
 
-// RouteWithContext 路由单个请求,使用传入的logger
+// RouteWithContext routes a single request using the provided logger entry.
+//
+// This is useful for maintaining log context across request lifecycle.
+//
+// Parameters:
+//   - ctx: Request context
+//   - request: The JSON-RPC request
+//   - logger: Context-aware logger
+//
+// Returns:
+//   - *jsonrpc.Response: The handler response
 func (r *Router) RouteWithContext(ctx context.Context, request *jsonrpc.Request, logger *logrus.Entry) *jsonrpc.Response {
 	return r.routeRequest(ctx, request, logger)
 }
@@ -224,9 +259,15 @@ func (r *Router) Route(ctx context.Context, request *jsonrpc.Request) *jsonrpc.R
 	return r.routeRequest(ctx, request, logger)
 }
 
+// MaxBatchSize defines the maximum number of requests allowed in a batch
+const MaxBatchSize = 100
+
+// DefaultBatchWorkerCount defines the default number of workers for batch request processing
+const DefaultBatchWorkerCount = 50
+
 // RouteBatch routes a batch of JSON-RPC requests.
 //
-// Each request in the batch is routed independently.
+// Each request in the batch is routed independently using a worker pool.
 //
 // Parameters:
 //   - ctx: Context for requests (supports cancellation and timeout)
@@ -241,25 +282,96 @@ func (r *Router) RouteBatch(ctx context.Context, requests []jsonrpc.Request) []*
 		}
 	}
 
+	if len(requests) > MaxBatchSize {
+		r.logger.WithField("count", len(requests)).Warn("Batch size exceeds limit")
+		return []*jsonrpc.Response{
+			jsonrpc.NewErrorResponse(nil, jsonrpc.NewServerError(
+				-32602, "Invalid params", fmt.Sprintf("Batch size exceeds maximum limit of %d", MaxBatchSize)),
+			),
+		}
+	}
+
 	r.logger.WithFields(logrus.Fields{
 		"count": len(requests),
 	}).Info("Routing batch requests")
 
-	// 处理批量请求
+	// Create responses array
 	responses := make([]*jsonrpc.Response, len(requests))
 
-	for i, request := range requests {
-		responses[i] = r.Route(ctx, &request)
+	taskCount := len(requests)
+	taskCh := make(chan int, taskCount)
+
+	workerCount := DefaultBatchWorkerCount
+	if taskCount < workerCount {
+		workerCount = taskCount
 	}
 
+	var wg sync.WaitGroup
+
+	// Start task feeder goroutine (fan-in)
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		defer close(taskCh)
+		for i := 0; i < taskCount; i++ {
+			taskCh <- i
+		}
+	}()
+
+	// Start workers (fan-out)
+	for i := 0; i < workerCount; i++ {
+		wg.Add(1)
+		go func(workerID int) {
+			defer wg.Done()
+
+			for idx := range taskCh {
+				if ctx.Err() != nil {
+					break
+				}
+
+				func() {
+					defer func() {
+						if p := recover(); p != nil {
+							r.logger.WithField("worker_id", workerID).WithField("panic", p).Error("Worker panic recovered")
+							responses[idx] = jsonrpc.NewErrorResponse(
+								requests[idx].ID,
+								jsonrpc.NewServerError(-32603, "Internal error", "Processing failed"),
+							)
+						}
+					}()
+
+					responses[idx] = r.Route(ctx, &requests[idx])
+					if responses[idx] == nil {
+						r.logger.WithField("worker_id", workerID).WithField("idx", idx).Warn("Route returned nil response, setting error")
+						responses[idx] = jsonrpc.NewErrorResponse(
+							requests[idx].ID,
+							jsonrpc.NewServerError(-32603, "Internal error", "Processing failed"),
+						)
+					}
+				}()
+			}
+		}(i)
+	}
+
+	wg.Wait()
+
 	r.logger.WithFields(logrus.Fields{
-		"request_count":  len(requests),
+		"request_count":  taskCount,
 		"response_count": len(responses),
 	}).Info("Batch routing completed")
 	return responses
 }
 
-// getHandler 获取处理器（线程安全）
+// getHandler retrieves a registered handler for the given method name.
+//
+// This method is thread-safe using a read lock.
+//
+// Parameters:
+//   - method: The JSON-RPC method name
+//
+// Returns:
+//   - Handler: The handler instance if found
+//   - bool: True if found, false otherwise
 func (r *Router) getHandler(method string) (Handler, bool) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -296,7 +408,15 @@ func (r *Router) HasHandler(method string) bool {
 	return found
 }
 
-// parseAndRoute 解析JSON-RPC请求并路由
+// parseAndRoute parses the request body and routes requests to handlers.
+//
+// This is a helper method used by HandleHTTPRequestWithContext.
+//
+// Parameters:
+//   - w: HTTP response writer
+//   - req: HTTP request
+//   - logger: Logger entry for tracing
+//   - body: The request body content
 func (r *Router) parseAndRoute(w http.ResponseWriter, req *http.Request, logger *logrus.Entry, body []byte) {
 	requests, err := jsonrpc.ParseRequest(body)
 	if err != nil {
@@ -304,6 +424,20 @@ func (r *Router) parseAndRoute(w http.ResponseWriter, req *http.Request, logger 
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		resp := jsonrpc.NewErrorResponse(nil, jsonrpc.ParseError)
+		data, _ := jsonrpc.MarshalResponse(resp)
+		if _, err := w.Write(data); err != nil {
+			logger.WithError(err).Error("Failed to write error response")
+		}
+		return
+	}
+
+	if len(requests) > MaxBatchSize {
+		logger.WithField("count", len(requests)).Warn("Batch size exceeds limit")
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		resp := jsonrpc.NewErrorResponse(nil, jsonrpc.NewServerError(
+			-32602, "Invalid params", fmt.Sprintf("Batch size exceeds maximum limit of %d", MaxBatchSize)),
+		)
 		data, _ := jsonrpc.MarshalResponse(resp)
 		if _, err := w.Write(data); err != nil {
 			logger.WithError(err).Error("Failed to write error response")
@@ -341,12 +475,14 @@ func (r *Router) parseAndRoute(w http.ResponseWriter, req *http.Request, logger 
 //   - logger: Logger entry with context fields for tracing
 func (r *Router) HandleHTTPRequestWithContext(w http.ResponseWriter, req *http.Request, logger *logrus.Entry) {
 	if req.Method == "OPTIONS" {
-		body, err := io.ReadAll(req.Body)
+		maxBody := r.maxRequestSize
+		limitedBody := http.MaxBytesReader(w, req.Body, maxBody)
+		body, err := io.ReadAll(limitedBody)
 		if err != nil {
 			logger.WithError(err).Error("Failed to read request body")
 			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusBadRequest)
-			if _, err := w.Write([]byte(`{"jsonrpc":"2.0","error":{"code":-32700,"message":"Parse error"},"id":null}`)); err != nil {
+			w.WriteHeader(http.StatusRequestEntityTooLarge)
+			if _, err := w.Write([]byte(`{"jsonrpc":"2.0","error":{"code":-32602,"message":"Request entity too large"},"id":null}`)); err != nil {
 				logger.WithError(err).Error("Failed to write error response")
 			}
 			return
@@ -380,12 +516,14 @@ func (r *Router) HandleHTTPRequestWithContext(w http.ResponseWriter, req *http.R
 //   - req: HTTP request
 func (r *Router) HandleHTTPRequest(w http.ResponseWriter, req *http.Request) {
 	if req.Method == "OPTIONS" {
-		body, err := io.ReadAll(req.Body)
+		maxBody := r.maxRequestSize
+		limitedBody := http.MaxBytesReader(w, req.Body, maxBody)
+		body, err := io.ReadAll(limitedBody)
 		if err != nil {
 			r.logger.WithError(err).Error("Failed to read request body")
 			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusBadRequest)
-			if _, err := w.Write([]byte(`{"jsonrpc":"2.0","error":{"code":-32700,"message":"Parse error"},"id":null}`)); err != nil {
+			w.WriteHeader(http.StatusRequestEntityTooLarge)
+			if _, err := w.Write([]byte(`{"jsonrpc":"2.0","error":{"code":-32602,"message":"Request entity too large"},"id":null}`)); err != nil {
 				r.logger.WithError(err).Error("Failed to write error response")
 			}
 			return
@@ -410,7 +548,14 @@ func (r *Router) HandleHTTPRequest(w http.ResponseWriter, req *http.Request) {
 	r.parseAndRouteSimple(w, req, body)
 }
 
-// parseAndRouteSimple 简化版本的解析和路由（不带logger参数）
+// parseAndRouteSimple parses and routes requests using the router's default logger.
+//
+// This is a helper method used by HandleHTTPRequest.
+//
+// Parameters:
+//   - w: HTTP response writer
+//   - req: HTTP request
+//   - body: The request body content
 func (r *Router) parseAndRouteSimple(w http.ResponseWriter, req *http.Request, body []byte) {
 	requests, err := jsonrpc.ParseRequest(body)
 	if err != nil {
@@ -418,6 +563,20 @@ func (r *Router) parseAndRouteSimple(w http.ResponseWriter, req *http.Request, b
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		resp := jsonrpc.NewErrorResponse(nil, jsonrpc.ParseError)
+		data, _ := jsonrpc.MarshalResponse(resp)
+		if _, err := w.Write(data); err != nil {
+			r.logger.WithError(err).Error("Failed to write error response")
+		}
+		return
+	}
+
+	if len(requests) > MaxBatchSize {
+		r.logger.WithField("count", len(requests)).Warn("Batch size exceeds limit")
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		resp := jsonrpc.NewErrorResponse(nil, jsonrpc.NewServerError(
+			-32602, "Invalid params", fmt.Sprintf("Batch size exceeds maximum limit of %d", MaxBatchSize)),
+		)
 		data, _ := jsonrpc.MarshalResponse(resp)
 		if _, err := w.Write(data); err != nil {
 			r.logger.WithError(err).Error("Failed to write error response")

@@ -3,6 +3,7 @@ package signer
 import (
 	"fmt"
 	"math/big"
+	"sync"
 
 	"github.com/mowind/web3signer-go/internal/kms"
 	"github.com/sirupsen/logrus"
@@ -26,6 +27,7 @@ type Client interface {
 //   - A default key for backward compatibility
 //   - Per-transaction key selection via SignTransactionWithKeyID
 type MultiKeySigner struct {
+	mu           sync.RWMutex
 	clients      map[string]Client // keyID -> Client mapping
 	defaultKeyID string            // default key ID for backward compatibility
 	logger       *logrus.Logger
@@ -66,6 +68,9 @@ func (m *MultiKeySigner) AddClient(keyID string, client Client) error {
 		return fmt.Errorf("client cannot be nil")
 	}
 
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
 	if _, exists := m.clients[keyID]; exists {
 		return fmt.Errorf("keyID %s already registered", keyID)
 	}
@@ -84,6 +89,9 @@ func (m *MultiKeySigner) AddClient(keyID string, client Client) error {
 // Returns:
 //   - error: An error if keyID is not found or is the default key
 func (m *MultiKeySigner) RemoveClient(keyID string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
 	if keyID == m.defaultKeyID {
 		return fmt.Errorf("cannot remove default keyID: %s", keyID)
 	}
@@ -107,6 +115,9 @@ func (m *MultiKeySigner) RemoveClient(keyID string) error {
 //   - Client: The registered client
 //   - error: An error if keyID is not found
 func (m *MultiKeySigner) GetClient(keyID string) (Client, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
 	client, exists := m.clients[keyID]
 	if !exists {
 		return nil, fmt.Errorf("keyID %s not found", keyID)

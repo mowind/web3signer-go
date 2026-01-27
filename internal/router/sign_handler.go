@@ -11,6 +11,7 @@ import (
 	"github.com/mowind/web3signer-go/internal/downstream"
 	internaljsonrpc "github.com/mowind/web3signer-go/internal/jsonrpc"
 	"github.com/mowind/web3signer-go/internal/signer"
+	"github.com/mowind/web3signer-go/internal/utils"
 	"github.com/sirupsen/logrus"
 	"github.com/umbracle/ethgo"
 	ethgojsonrpc "github.com/umbracle/ethgo/jsonrpc"
@@ -86,6 +87,11 @@ func (h *SignHandler) handleEthSign(_ context.Context, request *internaljsonrpc.
 		return h.CreateInvalidParamsResponse(request.ID, fmt.Sprintf("Invalid parameters: %v", err)), nil
 	}
 
+	if !utils.IsValidEthAddress(address) {
+		h.logger.WithField("address", address).Warn("Invalid Ethereum address format")
+		return h.CreateInvalidParamsResponse(request.ID, "Invalid Ethereum address format"), nil
+	}
+
 	expectedAddress := h.signer.Address().String()
 	if !strings.EqualFold(address, expectedAddress) {
 		h.logger.WithFields(logrus.Fields{
@@ -126,6 +132,11 @@ func (h *SignHandler) handleEthSignTransaction(_ context.Context, request *inter
 		"from": tx.From.String(),
 		"to":   tx.To,
 	}).Info("Signing transaction")
+
+	if tx.From.String() != "" && !utils.IsValidEthAddress(tx.From.String()) {
+		h.logger.WithField("from", tx.From.String()).Warn("Invalid From address format in eth_signTransaction")
+		return h.CreateInvalidParamsResponse(request.ID, "Invalid From address format"), nil
+	}
 
 	expectedAddress := h.signer.Address().String()
 	if tx.From.String() != "" && !strings.EqualFold(tx.From.String(), expectedAddress) {
@@ -205,6 +216,11 @@ func (h *SignHandler) validateRequest(request *internaljsonrpc.Request) (*signer
 	if err != nil {
 		h.logger.WithError(err).Warn("Failed to parse eth_sendTransaction params")
 		return nil, fmt.Errorf("invalid transaction parameters: %w", err)
+	}
+
+	if tx.From.String() != "" && !utils.IsValidEthAddress(tx.From.String()) {
+		h.logger.WithField("from", tx.From.String()).Warn("Invalid From address format in eth_sendTransaction")
+		return nil, fmt.Errorf("invalid From address format")
 	}
 
 	expectedAddress := h.signer.Address().String()
@@ -300,15 +316,14 @@ func (h *SignHandler) estimateGasIfNeeded(tx *signer.JSONRPCTransaction) error {
 
 	estimatedGas, err := h.downstreamRPC.Eth().EstimateGas(callMsg)
 	if err != nil {
-		h.logger.WithError(err).Warn("Failed to estimate gas, using default")
-		// 使用默认 gas 限制
-		tx.Gas = 21000 // 21000 gas for simple transfer
-	} else {
-		// 增加 20% 作为安全边界
-		estimatedGas = estimatedGas * 120 / 100
-		tx.Gas = estimatedGas
-		h.logger.WithField("estimatedGas", estimatedGas).Debug("Estimated gas for transaction")
+		h.logger.WithError(err).Error("Failed to estimate gas")
+		return fmt.Errorf("failed to estimate gas: %w", err)
 	}
+
+	// 增加 20% 作为安全边界
+	estimatedGas = estimatedGas * 120 / 100
+	tx.Gas = estimatedGas
+	h.logger.WithField("estimatedGas", estimatedGas).Debug("Estimated gas for transaction")
 
 	return nil
 }

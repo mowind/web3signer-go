@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -14,12 +15,33 @@ import (
 )
 
 func main() {
-	// 使用提供的参数
+	endpoint := os.Getenv("TEST_KMS_ENDPOINT")
+	accessKeyID := os.Getenv("TEST_KMS_ACCESS_KEY_ID")
+	secretKey := os.Getenv("TEST_KMS_SECRET_KEY")
+	keyID := os.Getenv("TEST_KMS_KEY_ID")
+
+	if endpoint == "" {
+		fmt.Fprintln(os.Stderr, "ERROR: TEST_KMS_ENDPOINT environment variable is required")
+		os.Exit(1)
+	}
+	if accessKeyID == "" {
+		fmt.Fprintln(os.Stderr, "ERROR: TEST_KMS_ACCESS_KEY_ID environment variable is required")
+		os.Exit(1)
+	}
+	if secretKey == "" {
+		fmt.Fprintln(os.Stderr, "ERROR: TEST_KMS_SECRET_KEY environment variable is required")
+		os.Exit(1)
+	}
+	if keyID == "" {
+		fmt.Fprintln(os.Stderr, "ERROR: TEST_KMS_KEY_ID environment variable is required")
+		os.Exit(1)
+	}
+
 	kmsConfig := &config.KMSConfig{
-		Endpoint:    "http://10.2.8.108:8080",
-		AccessKeyID: "c609f7de1e154999bd1018026a665149",
-		SecretKey:   "Z7CY32LuQW+ccdc+m01YY4b92neAi7bM5bQ0SWbXjp4=",
-		KeyID:       "38HGvLc8nJ6KwQqn2PzCvZg70yJ",
+		Endpoint:    endpoint,
+		AccessKeyID: accessKeyID,
+		SecretKey:   secretKey,
+		KeyID:       keyID,
 	}
 
 	fmt.Println("=== MPC-KMS HTTP签名测试 ===")

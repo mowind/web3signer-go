@@ -5,6 +5,8 @@ import (
 	"net/url"
 	"os"
 	"strings"
+
+	"github.com/mowind/web3signer-go/internal/utils"
 )
 
 // Config 表示应用程序的完整配置
@@ -27,12 +29,13 @@ type Config struct {
 
 // HTTPConfig 定义 HTTP 服务器配置
 type HTTPConfig struct {
-	Host             string `mapstructure:"host"`
-	Port             int    `mapstructure:"port"`
-	TLSCertFile      string `mapstructure:"tls-cert-file"`
-	TLSKeyFile       string `mapstructure:"tls-key-file"`
-	TLSAutoRedirect  bool   `mapstructure:"tls-auto-redirect"`
-	MaxRequestSizeMB int64  `mapstructure:"max-request-size-mb"` // 最大请求体大小（MB），用于防止DoS攻击
+	Host             string   `mapstructure:"host"`
+	Port             int      `mapstructure:"port"`
+	TLSCertFile      string   `mapstructure:"tls-cert-file"`
+	TLSKeyFile       string   `mapstructure:"tls-key-file"`
+	TLSAutoRedirect  bool     `mapstructure:"tls-auto-redirect"`
+	MaxRequestSizeMB int64    `mapstructure:"max-request-size-mb"` // 最大请求体大小（MB），用于防止DoS攻击
+	AllowedOrigins   []string `mapstructure:"allowed-origins"`     // CORS 允许的源列表，空列表表示允许所有源
 }
 
 // Validate 验证 HTTP 配置
@@ -92,38 +95,10 @@ func (c *KMSConfig) Validate() error {
 		return fmt.Errorf("kms-address is required")
 	}
 	// 验证地址格式
-	if !isValidEthAddress(c.Address) {
+	if !utils.IsValidEthAddress(c.Address) {
 		return fmt.Errorf("kms-address has invalid Ethereum address format: '%s'", c.Address)
 	}
 	return nil
-}
-
-// isValidEthAddress 验证以太坊地址格式
-func isValidEthAddress(addr string) bool {
-	// 检查是否为空
-	if addr == "" {
-		return false
-	}
-	// 检查是否有 "0x" 前缀
-	if !strings.HasPrefix(addr, "0x") {
-		return false
-	}
-	// 检查长度是否为 42
-	if len(addr) != 42 {
-		return false
-	}
-	// 检查 "0x" 之后的所有字符是否都是有效的十六进制数字
-	for _, c := range addr[2:] {
-		if !isHexDigit(c) {
-			return false
-		}
-	}
-	return true
-}
-
-// isHexDigit 检查字符是否为有效的十六进制数字 (0-9, a-f, A-F)
-func isHexDigit(c rune) bool {
-	return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')
 }
 
 // DownstreamConfig 定义下游服务配置

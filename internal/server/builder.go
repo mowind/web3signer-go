@@ -279,7 +279,17 @@ func (b *Builder) getLoggerWithContext(c *gin.Context) *logrus.Entry {
 // corsMiddleware 处理CORS请求
 func (b *Builder) corsMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
+		origin := c.Request.Header.Get("Origin")
+		allowedOrigins := b.cfg.HTTP.AllowedOrigins
+
+		// 如果 AllowedOrigins 为空，允许所有源（向后兼容）
+		if len(allowedOrigins) == 0 {
+			c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
+		} else if origin != "" && b.isOriginAllowed(origin, allowedOrigins) {
+			c.Writer.Header().Set("Access-Control-Allow-Origin", origin)
+			c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
+		}
+
 		c.Writer.Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS")
 		c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
 
@@ -290,6 +300,16 @@ func (b *Builder) corsMiddleware() gin.HandlerFunc {
 
 		c.Next()
 	}
+}
+
+// isOriginAllowed 检查请求源是否在允许列表中
+func (b *Builder) isOriginAllowed(origin string, allowedOrigins []string) bool {
+	for _, allowed := range allowedOrigins {
+		if allowed == "*" || allowed == origin {
+			return true
+		}
+	}
+	return false
 }
 
 // tlsRedirectMiddleware HTTP到HTTPS重定向中间件

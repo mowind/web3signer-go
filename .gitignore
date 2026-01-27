@@ -41,3 +41,5 @@ build/
 .bmad-core
 
 gw-http-api.md
+review/
+review*.md

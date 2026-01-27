@@ -103,37 +103,30 @@ func (s *MPCKMSSigner) SignTransaction(tx *ethgo.Transaction) (*ethgo.Transactio
 
 	// 复制指针字段（如果有值）
 	if tx.To != nil {
-		toCopy := *tx.To
-		signedTx.To = &toCopy
+		signedTx.To = tx.To
 	} else {
 		signedTx.To = nil
 	}
 
 	if tx.Value != nil {
-		valueCopy := new(big.Int).Set(tx.Value)
-		signedTx.Value = valueCopy
+		signedTx.Value = tx.Value
 	}
 
 	if tx.ChainID != nil {
-		chainIDCopy := new(big.Int).Set(tx.ChainID)
-		signedTx.ChainID = chainIDCopy
+		signedTx.ChainID = tx.ChainID
 	}
 
 	if tx.MaxFeePerGas != nil {
-		maxFeeCopy := new(big.Int).Set(tx.MaxFeePerGas)
-		signedTx.MaxFeePerGas = maxFeeCopy
+		signedTx.MaxFeePerGas = tx.MaxFeePerGas
 	}
 
 	if tx.MaxPriorityFeePerGas != nil {
-		maxPriorityCopy := new(big.Int).Set(tx.MaxPriorityFeePerGas)
-		signedTx.MaxPriorityFeePerGas = maxPriorityCopy
+		signedTx.MaxPriorityFeePerGas = tx.MaxPriorityFeePerGas
 	}
 
 	// 复制 Input 数据
 	if tx.Input != nil {
-		inputCopy := make([]byte, len(tx.Input))
-		copy(inputCopy, tx.Input)
-		signedTx.Input = inputCopy
+		signedTx.Input = tx.Input
 	}
 
 	// 复制 AccessList

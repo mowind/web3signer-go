@@ -11,6 +11,7 @@ import (
 
 	"github.com/mowind/web3signer-go/internal/config"
 	"github.com/mowind/web3signer-go/internal/jsonrpc"
+	"github.com/mowind/web3signer-go/internal/utils"
 	"github.com/sirupsen/logrus"
 )
 
@@ -40,22 +41,48 @@ func NewClient(cfg *config.DownstreamConfig, logger *logrus.Logger) *Client {
 		config: cfg,
 		httpClient: &http.Client{
 			Timeout:   30 * time.Second,
-			Transport: createTransport(),
+			Transport: utils.CreateTransport(100, 90*time.Second),
 		},
 		logger: logger,
 	}
 }
 
-// createTransport 创建HTTP传输配置，用于优化连接池性能
-func createTransport() *http.Transport {
-	return &http.Transport{
-		MaxIdleConns:          100,
-		MaxIdleConnsPerHost:   100,
-		IdleConnTimeout:       90 * time.Second,
-		ResponseHeaderTimeout: 10 * time.Second,
-		DisableCompression:    false,
-		DisableKeepAlives:     false,
+// performHTTPRequest handles the common HTTP request execution logic.
+// It builds the request, executes it, and returns the response body reader.
+// The caller is responsible for closing the reader (which closes the response body).
+func (c *Client) performHTTPRequest(ctx context.Context, reqData []byte) (io.ReadCloser, error) {
+	// Build URL
+	url := c.config.BuildURL()
+
+	// Create HTTP request
+	httpReq, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(reqData))
+	if err != nil {
+		return nil, WrapError(err, ErrorCodeRequestFailed, "failed to create HTTP request")
 	}
+
+	// Set headers
+	httpReq.Header.Set("Content-Type", "application/json")
+	httpReq.Header.Set("Accept", "application/json")
+
+	// Execute request
+	resp, err := c.httpClient.Do(httpReq)
+	if err != nil {
+		return nil, ConnectionError(err)
+	}
+
+	// Check status code
+	if resp.StatusCode != http.StatusOK {
+		defer func() {
+			_ = resp.Body.Close()
+		}()
+		// Read small amount of body for error message
+		limitReader := io.LimitReader(resp.Body, 1024)
+		respBody, _ := io.ReadAll(limitReader)
+		return nil, RequestError(fmt.Errorf("downstream service returned status %d: %s",
+			resp.StatusCode, string(respBody)))
+	}
+
+	return resp.Body, nil
 }
 
 // ForwardRequest forwards a single JSON-RPC request to downstream service.
@@ -70,64 +97,39 @@ func createTransport() *http.Transport {
 //   - *jsonrpc.Response: The response from downstream service
 //   - error: An error if forwarding fails
 func (c *Client) ForwardRequest(ctx context.Context, req *jsonrpc.Request) (*jsonrpc.Response, error) {
-	// 序列化请求
+	// Serialize request
 	reqData, err := json.Marshal(req)
 	if err != nil {
 		return nil, WrapError(err, ErrorCodeInvalidResponse, "failed to marshal request")
 	}
 
-	// 构建下游服务URL
-	url := c.config.BuildURL()
-
-	// 创建HTTP请求
-	httpReq, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(reqData))
+	// Execute HTTP request
+	bodyReader, err := c.performHTTPRequest(ctx, reqData)
 	if err != nil {
-		return nil, WrapError(err, ErrorCodeRequestFailed, "failed to create HTTP request")
-	}
-
-	// 设置请求头
-	httpReq.Header.Set("Content-Type", "application/json")
-	httpReq.Header.Set("Accept", "application/json")
-
-	// 执行请求
-	resp, err := c.httpClient.Do(httpReq)
-	if err != nil {
-		return nil, ConnectionError(err)
+		return nil, err
 	}
 	defer func() {
-		_ = resp.Body.Close()
+		_ = bodyReader.Close()
 	}()
 
-	// 读取响应体
-	respBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, WrapError(err, ErrorCodeInvalidResponse, "failed to read response body")
-	}
-
-	// 检查HTTP状态码
-	if resp.StatusCode != http.StatusOK {
-		return nil, RequestError(fmt.Errorf("downstream service returned status %d: %s",
-			resp.StatusCode, string(respBody)))
-	}
-
-	// 解析JSON-RPC响应
+	// Parse JSON-RPC response using stream decoder
 	var jsonResp jsonrpc.Response
-	if err := json.Unmarshal(respBody, &jsonResp); err != nil {
+	decoder := json.NewDecoder(bodyReader)
+	// Disallow unknown fields to ensure strict parsing
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&jsonResp); err != nil {
 		return nil, InvalidResponseError(err)
 	}
 
-	// 确保响应ID与请求ID匹配
+	// Validate response ID
 	if req.ID != nil && jsonResp.ID != nil {
-		// 尝试比较ID值
 		if !compareIDs(req.ID, jsonResp.ID) {
-			// 记录ID不匹配警告
 			c.logger.WithFields(logrus.Fields{
 				"request_id":  req.ID,
 				"response_id": jsonResp.ID,
 			}).Warn("JSON-RPC ID mismatch in response")
 		}
 	} else if req.ID != nil {
-		// 如果请求有ID但响应没有，设置响应ID
 		jsonResp.ID = req.ID
 	}
 
@@ -148,50 +150,33 @@ func (c *Client) ForwardRequest(ctx context.Context, req *jsonrpc.Request) (*jso
 //   - []jsonrpc.Response: Ordered responses matching request order
 //   - error: An error if forwarding fails
 func (c *Client) ForwardBatchRequest(ctx context.Context, requests []jsonrpc.Request) ([]jsonrpc.Response, error) {
-	// 序列化批量请求
+	// Serialize batch request
 	reqData, err := json.Marshal(requests)
 	if err != nil {
 		return nil, WrapError(err, ErrorCodeInvalidResponse, "failed to marshal batch request")
 	}
 
-	// 构建下游服务URL
-	url := c.config.BuildURL()
-
-	// 创建HTTP请求
-	httpReq, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(reqData))
+	// Execute HTTP request
+	bodyReader, err := c.performHTTPRequest(ctx, reqData)
 	if err != nil {
-		return nil, WrapError(err, ErrorCodeRequestFailed, "failed to create HTTP request")
-	}
-
-	// 设置请求头
-	httpReq.Header.Set("Content-Type", "application/json")
-	httpReq.Header.Set("Accept", "application/json")
-
-	// 执行请求
-	resp, err := c.httpClient.Do(httpReq)
-	if err != nil {
-		return nil, ConnectionError(err)
+		return nil, err
 	}
 	defer func() {
-		_ = resp.Body.Close()
+		_ = bodyReader.Close()
 	}()
 
-	// 读取响应体
-	respBody, err := io.ReadAll(resp.Body)
+	// Read all body to handle potentially mixed response types (array vs object)
+	// We need the full body here because we might need to try multiple parsing strategies
+	// For standard successful batch responses, this is still a slight overhead but safer
+	respBody, err := io.ReadAll(bodyReader)
 	if err != nil {
 		return nil, WrapError(err, ErrorCodeInvalidResponse, "failed to read response body")
 	}
 
-	// 检查HTTP状态码
-	if resp.StatusCode != http.StatusOK {
-		return nil, RequestError(fmt.Errorf("downstream service returned status %d: %s",
-			resp.StatusCode, string(respBody)))
-	}
-
-	// 解析批量响应
+	// Parse batch response
 	var jsonResponses []jsonrpc.Response
 	if err := json.Unmarshal(respBody, &jsonResponses); err != nil {
-		// 如果不是数组，尝试解析为单个响应
+		// Fallback: try parsing as single response
 		var singleResp jsonrpc.Response
 		if err := json.Unmarshal(respBody, &singleResp); err != nil {
 			return nil, InvalidResponseError(err)
@@ -199,16 +184,15 @@ func (c *Client) ForwardBatchRequest(ctx context.Context, requests []jsonrpc.Req
 		jsonResponses = []jsonrpc.Response{singleResp}
 	}
 
-	// 确保响应顺序和ID匹配
+	// Validate response count
 	if len(jsonResponses) != len(requests) {
 		return nil, BatchSizeMismatchError(len(requests), len(jsonResponses))
 	}
 
-	// 验证和修复响应ID
+	// Validate response IDs
 	for i := range jsonResponses {
 		if requests[i].ID != nil && jsonResponses[i].ID != nil {
 			if !compareIDs(requests[i].ID, jsonResponses[i].ID) {
-				// 记录ID不匹配警告
 				c.logger.WithFields(logrus.Fields{
 					"index":       i,
 					"request_id":  requests[i].ID,
@@ -216,7 +200,6 @@ func (c *Client) ForwardBatchRequest(ctx context.Context, requests []jsonrpc.Req
 				}).Warn("JSON-RPC ID mismatch in batch response")
 			}
 		} else if requests[i].ID != nil {
-			// 如果请求有ID但响应没有，设置响应ID
 			jsonResponses[i].ID = requests[i].ID
 		}
 	}
