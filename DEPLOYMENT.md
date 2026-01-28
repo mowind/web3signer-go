@@ -20,8 +20,11 @@
 项目使用 Makefile 管理构建和测试过程：
 
 ```bash
-# 构建项目
+# 构建项目（默认版本 v0.1.0）
 make build
+
+# 查看构建版本信息
+make version-info
 
 # 清理构建文件
 make clean
@@ -30,37 +33,30 @@ make clean
 make help
 ```
 
-### 手动构建
-
-如果需要手动构建：
+### 自定义版本构建
 
 ```bash
-# 构建
-go build -o web3signer ./cmd/web3signer/
+# 使用自定义版本号构建
+make build VERSION=v0.2.0
 
-# 运行
-./web3signer --help
-
-# 指定配置文件
-./web3signer --config /path/to/config.yaml
+# 构建时会自动注入版本、提交哈希和构建时间
+# 可通过 ./web3signer --version 查看
 ```
 
 ### 手动构建
 
-如果需要手动构建：
-
 ```bash
-# 构建
-go build -o web3signer ./cmd/web3signer
+# 构建并注入版本信息
+go build -ldflags="-X main.Version=v0.1.0 -X main.Commit=$(git rev-parse --short HEAD) -X main.BuildTime=$(date -u +%Y-%m-%dT%H:%M:%SZ)" -o web3signer ./cmd/web3signer
 
 # 运行
 ./web3signer --help
 
-# 指定配置文件
-./web3signer --config /path/to/config.yaml
-
 # 查看版本信息
 ./web3signer --version
+
+# 指定配置文件
+./web3signer --config /path/to/config.yaml
 ```
 
 ---
@@ -82,7 +78,7 @@ make run
 ### 基础配置示例
 
 ```bash
-# 完整配置示例
+# 完整配置示例（无认证）
 ./web3signer \
   --http-host 0.0.0.0 \
   --http-port 9000 \
@@ -96,11 +92,66 @@ make run
   --log-level info
 ```
 
+### 使用认证的安全配置
+
+```bash
+# 使用 JWT Bearer Token 认证
+./web3signer \
+  --http-host 0.0.0.0 \
+  --http-port 9000 \
+  --auth-type jwt \
+  --auth-jwt-secret your-jwt-secret-key \
+  --kms-endpoint https://kms.example.com \
+  --kms-access-key-id YOUR_ACCESS_KEY \
+  --kms-secret-key YOUR_SECRET_KEY \
+  --kms-key-id YOUR_KEY_ID \
+  --downstream-http-host http://localhost \
+  --downstream-http-port 8545 \
+  --log-level info
+
+# 使用 API-Key 认证
+./web3signer \
+  --http-host 0.0.0.0 \
+  --http-port 9000 \
+  --auth-type api-key \
+  --auth-api-key your-api-key-value \
+  --kms-endpoint https://kms.example.com \
+  --kms-access-key-id YOUR_ACCESS_KEY \
+  --kms-secret-key YOUR_SECRET_KEY \
+  --kms-key-id YOUR_KEY_ID \
+  --downstream-http-host http://localhost \
+  --downstream-http-port 8545 \
+  --log-level info
+```
+
+### 使用 HTTPS/TLS 的安全配置
+
+```bash
+# 启用 HTTPS/TLS
+./web3signer \
+  --http-host 0.0.0.0 \
+  --https-enabled \
+  --https-port 9443 \
+  --https-cert-path /path/to/cert.pem \
+  --https-key-path /path/to/key.pem \
+  --auth-type jwt \
+  --auth-jwt-secret your-jwt-secret-key \
+  --kms-endpoint https://kms.example.com \
+  --kms-access-key-id YOUR_ACCESS_KEY \
+  --kms-secret-key YOUR_SECRET_KEY \
+  --kms-key-id YOUR_KEY_ID \
+  --downstream-http-host http://localhost \
+  --downstream-http-port 8545 \
+  --log-level info
+```
+
 ---
 
 ## Docker 部署
 
 ### 使用 Docker Compose（推荐）
+
+#### 基础配置
 
 ```yaml
 version: '3.8'
@@ -136,6 +187,48 @@ services:
       start_period: 40s
 ```
 
+#### 生产环境配置（启用认证和TLS）
+
+```yaml
+version: '3.8'
+
+services:
+  web3signer:
+    build: .
+    container_name: web3signer
+    restart: unless-stopped
+    ports:
+      - "9443:9443"  # HTTPS 端口
+    environment:
+      - WEB3SIGNER_HTTP_HOST=0.0.0.0
+      - WEB3SIGNER_HTTP_PORT=9000
+      - WEB3SIGNER_AUTH_TYPE=jwt
+      - WEB3SIGNER_AUTH_JWT_SECRET=${JWT_SECRET}
+      - WEB3SIGNER_HTTPS_ENABLED=true
+      - WEB3SIGNER_HTTPS_PORT=9443
+      - WEB3SIGNER_HTTPS_CERT_PATH=/app/certs/web3signer.crt
+      - WEB3SIGNER_HTTPS_KEY_PATH=/app/certs/web3signer.key
+      - WEB3SIGNER_KMS_ENDPOINT=https://kms.example.com
+      - WEB3SIGNER_KMS_ACCESS_KEY_ID=${KMS_ACCESS_KEY_ID}
+      - WEB3SIGNER_KMS_SECRET_KEY=${KMS_SECRET_KEY}
+      - WEB3SIGNER_KMS_KEY_ID=${KMS_KEY_ID}
+      - WEB3SIGNER_DOWNSTREAM_HTTP_HOST=http://downstream
+      - WEB3SIGNER_DOWNSTREAM_HTTP_PORT=8545
+      - WEB3SIGNER_DOWNSTREAM_HTTP_PATH=/
+      - WEB3SIGNER_LOG_LEVEL=info
+      - WEB3SIGNER_LOG_FORMAT=json
+    volumes:
+      - ./configs:/app/configs:ro
+      - ./logs:/app/logs
+      - ./certs:/app/certs:ro  # TLS 证书
+    healthcheck:
+      test: ["CMD", "curl", "-f", "https://localhost:9443/health", "--insecure"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+```
+
 ### 使用 Docker 命令
 
 ```bash
@@ -160,6 +253,28 @@ docker run -d \
   -e WEB3SIGNER_DOWNSTREAM_HTTP_HOST=http://localhost \
   -e WEB3SIGNER_DOWNSTREAM_HTTP_PORT=8545 \
   -e WEB3SIGNER_DOWNSTREAM_HTTP_PATH=/ \
+  web3signer:latest
+
+# 运行容器（生产环境 - 启用认证和TLS）
+docker run -d \
+  --name web3signer \
+  -p 9443:9443 \
+  -e WEB3SIGNER_HTTP_HOST=0.0.0.0 \
+  -e WEB3SIGNER_AUTH_TYPE=jwt \
+  -e WEB3SIGNER_AUTH_JWT_SECRET=your-jwt-secret \
+  -e WEB3SIGNER_HTTPS_ENABLED=true \
+  -e WEB3SIGNER_HTTPS_PORT=9443 \
+  -e WEB3SIGNER_HTTPS_CERT_PATH=/app/certs/web3signer.crt \
+  -e WEB3SIGNER_HTTPS_KEY_PATH=/app/certs/web3signer.key \
+  -e WEB3SIGNER_KMS_ENDPOINT=https://kms.example.com \
+  -e WEB3SIGNER_KMS_ACCESS_KEY_ID=YOUR_ACCESS_KEY \
+  -e WEB3SIGNER_KMS_SECRET_KEY=YOUR_SECRET_KEY \
+  -e WEB3SIGNER_KMS_KEY_ID=YOUR_KEY_ID \
+  -e WEB3SIGNER_DOWNSTREAM_HTTP_HOST=http://localhost \
+  -e WEB3SIGNER_DOWNSTREAM_HTTP_PORT=8545 \
+  -e WEB3SIGNER_LOG_LEVEL=info \
+  -e WEB3SIGNER_LOG_FORMAT=json \
+  -v $(pwd)/certs:/app/certs:ro \
   web3signer:latest
 
 # 运行容器（指定配置文件）
@@ -303,6 +418,24 @@ export GOMEMLIMIT=512MiB
 | `--http-host` | localhost | HTTP 服务器监听地址 | WEB3SIGNER_HTTP_HOST |
 | `--http-port` | 9000 | HTTP 服务器监听端口 | WEB3SIGNER_HTTP_PORT |
 | `--log-level` | info | 日志级别 (debug/info/warn/error/fatal) | WEB3SIGNER_LOG_LEVEL |
+| `--log-format` | text | 日志格式 (text/json) | WEB3SIGNER_LOG_FORMAT |
+
+#### 认证配置（可选，生产环境推荐）
+
+| 参数 | 默认值 | 说明 | 环境变量 |
+|------|---------|------|-----------|
+| `--auth-type` | - | 认证类型 (jwt/api-key) | WEB3SIGNER_AUTH_TYPE |
+| `--auth-jwt-secret` | - | JWT 密钥（auth-type=jwt 时必需） | WEB3SIGNER_AUTH_JWT_SECRET |
+| `--auth-api-key` | - | API 密钥（auth-type=api-key 时必需） | WEB3SIGNER_AUTH_API_KEY |
+
+#### TLS/HTTPS 配置（可选，生产环境推荐）
+
+| 参数 | 默认值 | 说明 | 环境变量 |
+|------|---------|------|-----------|
+| `--https-enabled` | false | 是否启用 HTTPS | WEB3SIGNER_HTTPS_ENABLED |
+| `--https-port` | 9443 | HTTPS 服务监听端口 | WEB3SIGNER_HTTPS_PORT |
+| `--https-cert-path` | - | TLS 证书文件路径 | WEB3SIGNER_HTTPS_CERT_PATH |
+| `--https-key-path` | - | TLS 私钥文件路径 | WEB3SIGNER_HTTPS_KEY_PATH |
 
 #### MPC-KMS 配置
 
@@ -330,6 +463,19 @@ http:
   host: 0.0.0.0
   port: 9000
 
+# 认证配置（推荐生产环境启用）
+auth:
+  type: jwt  # 可选值: jwt, api-key
+  jwt-secret: ${JWT_SECRET}  # auth-type=jwt 时必需
+  # api-key: ${API_KEY}  # auth-type=api-key 时必需
+
+# TLS/HTTPS 配置（推荐生产环境启用）
+tls:
+  enabled: true
+  port: 9443
+  cert-path: /etc/ssl/certs/web3signer.crt
+  key-path: /etc/ssl/private/web3signer.key
+
 kms:
   endpoint: https://kms.example.com
   access-key-id: ${KMS_ACCESS_KEY_ID}
@@ -343,6 +489,7 @@ downstream:
 
 log:
   level: info
+  format: json  # 可选值: text, json
 ```
 
 创建开发环境配置 `configs/development.yaml`：
@@ -384,6 +531,18 @@ log:
 WEB3SIGNER_HTTP_HOST=0.0.0.0
 WEB3SIGNER_HTTP_PORT=9000
 WEB3SIGNER_LOG_LEVEL=info
+WEB3SIGNER_LOG_FORMAT=json
+
+# 认证配置（生产环境推荐）
+WEB3SIGNER_AUTH_TYPE=jwt
+WEB3SIGNER_AUTH_JWT_SECRET=your-jwt-secret-key
+# WEB3SIGNER_AUTH_API_KEY=your-api-key  # 使用 API-Key 时启用
+
+# TLS/HTTPS 配置（生产环境推荐）
+WEB3SIGNER_HTTPS_ENABLED=true
+WEB3SIGNER_HTTPS_PORT=9443
+WEB3SIGNER_HTTPS_CERT_PATH=/etc/ssl/certs/web3signer.crt
+WEB3SIGNER_HTTPS_KEY_PATH=/etc/ssl/private/web3signer.key
 
 # MPC-KMS 配置
 WEB3SIGNER_KMS_ENDPOINT=https://kms.example.com
@@ -967,8 +1126,21 @@ kubectl rollout status deployment/web3signer
 # 查看帮助
 ./web3signer --help
 
+# 查看版本信息
+./web3signer --version
+
 # 健康检查
 curl http://localhost:9000/health
+curl http://localhost:9000/ready
+
+# 使用认证的健康检查（JWT）
+curl -H "Authorization: Bearer YOUR_JWT_TOKEN" http://localhost:9000/health
+
+# 使用认证的健康检查（API-Key）
+curl -H "X-API-Key: YOUR_API_KEY" http://localhost:9000/health
+
+# HTTPS 健康检查
+curl -k https://localhost:9443/health
 
 # 查看日志
 docker logs -f web3signer
@@ -981,6 +1153,7 @@ docker restart web3signer
 
 # 查看端口占用
 sudo lsof -i :9000
+sudo lsof -i :9443
 ```
 
 ### 配置检查清单
